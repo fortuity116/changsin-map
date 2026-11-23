@@ -288,11 +288,9 @@ body.has-detail .zoombox { display: flex; }
 @media (max-width: 820px) { body.has-detail .zoombox { display: none; } }
 
 /* 지도 위 장소 이름 라벨 */
-.mlabel { position: absolute; display: inline-flex; align-items: center; gap: 6px; max-width: 190px; padding: 4px 11px 4px 9px; border-radius: 999px; pointer-events: none; white-space: nowrap;
-  font: 700 11.5px/1.25 var(--font); letter-spacing: -0.01em; color: #4A4358;
-  background: rgba(255,255,255,.88); border: 1.5px dashed #8F7FA8; box-shadow: 0 2px 8px rgba(70,60,90,.18), 0 0 0 3px rgba(255,255,255,.55); }
-.mlabel i { width: 7px; height: 7px; border-radius: 50%; background: #7C6A96; flex: none; }
-.mlabel span { overflow: hidden; text-overflow: ellipsis; }
+.mlabel { position: absolute; display: inline-block; max-width: 150px; padding: 4px 10px; border-radius: 999px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-align: center;
+  font: 700 11.5px/1.25 var(--font); letter-spacing: -0.01em; color: color-mix(in srgb, var(--lc, #0CA5B0) 62%, #10222A);
+  background: rgba(255,255,255,.9); border: 1.5px dashed var(--lc, #0CA5B0); box-shadow: 0 2px 8px rgba(30,50,60,.18), 0 0 0 3px rgba(255,255,255,.55); }
 .mlabel.p { transform: translate(14px, -50%); }
 .mlabel.c { transform: translate(-50%, -50%); }
 #map.nolabel .mlabel { display: none; }
@@ -313,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v30-title)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v31-label2)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -946,7 +944,7 @@ function buildOverlays(id, f) {
     else if (f.kind === 'line') { pos = LL(lineMid(f.pts)); }
     else { pos = LL(centerOf(f)); }
     var lab = document.createElement('div'); lab.className = 'mlabel ' + cls;
-    lab.appendChild(document.createElement('i')); var lt = document.createElement('span'); lt.textContent = '\u201C' + nm + '\u201D'; lab.appendChild(lt);
+    lab.textContent = nm; lab.style.setProperty('--lc', CAT.nickname.color);
     items.push(new N.Marker({ position: pos, map: map, zIndex: 150, clickable: false,
       icon: { content: lab, size: new N.Size(1, 1), anchor: new N.Point(0, 0) } }));
   }
