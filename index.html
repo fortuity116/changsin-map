@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v39-shift)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v40-shift2)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -764,7 +764,7 @@ function initMap() {
   try {
     if (!isNarrow()) {
       var pr = map.getProjection(), pt = pr.fromCoordToOffset(map.getCenter());
-      pt.x -= 290; map.setCenter(pr.fromOffsetToCoord(pt));
+      pt.x -= 390; pt.y += 10; map.setCenter(pr.fromOffsetToCoord(pt));
     }
   } catch (e) {} new ResizeObserver(fitSize).observe(mapBox);
   /* 시작 위치에서 16단계로 축소했을 때 보이는 화면 범위 안에서만 이동할 수 있게 잠근다 */
