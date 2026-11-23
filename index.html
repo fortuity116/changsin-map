@@ -1,0 +1,1351 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>창신동 재개발 맵핑 지도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+/* Layout: 왼쪽 패널(카테고리 레이어·기록 목록) + 전체 화면 네이버 지도. 좁은 화면은 지도가 위, 패널이 아래.
+   UI는 무채색. 색은 카테고리를 나타내는 데만 쓴다. */
+:root {
+  --bg: #F2F5F3; --surface: #FFFFFF; --surface-2: #E8EEEB; --ink: #17211E; --ink-2: #51605B;
+  --line: #D3DBD7; --danger: #B3261E;
+  --font: "Noto Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #101614; --surface: #18211E; --surface-2: #232F2B; --ink: #E7EEEB; --ink-2: #9DADA7;
+    --line: #2C3935; --danger: #FF8A80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #101614; --surface: #18211E; --surface-2: #232F2B; --ink: #E7EEEB; --ink-2: #9DADA7;
+  --line: #2C3935; --danger: #FF8A80; color-scheme: dark;
+}
+
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body { background: var(--bg); color: var(--ink); font-family: var(--font); font-size: 14px; line-height: 1.5; }
+h1, h2, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+button, input, select, textarea { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+
+.app { display: grid; grid-template-columns: minmax(300px, 380px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr); height: 100vh; height: 100dvh; }
+.side { min-width: 0; min-height: 0; background: var(--surface); border-right: 1px solid var(--line); overflow-y: auto; }
+.side-in {
+  display: flex; flex-direction: column; gap: 22px; padding-block: 18px 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.head h1 { font-size: 20px; font-weight: 700; letter-spacing: -0.01em; }
+.head p { color: var(--ink-2); margin-top: 2px; }
+.summary { color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.notices { display: flex; flex-direction: column; gap: 8px; }
+.notice { background: var(--surface-2); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; color: var(--ink-2); font-size: 13px; }
+#diag summary { cursor: pointer; font-weight: 500; color: var(--ink); }
+#diagOut { margin: 8px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; font: 12px/1.5 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
+.block { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.row-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+h2 { font-size: 13px; font-weight: 700; letter-spacing: 0.04em; color: var(--ink-2); }
+.hint { color: var(--ink-2); font-size: 12.5px; }
+.lbl { display: block; font-size: 13px; font-weight: 500; margin-bottom: 4px; }
+
+.field { width: 100%; min-width: 0; box-sizing: border-box; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; min-height: 36px; }
+textarea.field { resize: vertical; min-height: 110px; }
+.btn { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 12px; min-height: 36px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 6px; white-space: nowrap; }
+.btn:hover:not(:disabled) { background: var(--surface-2); }
+.btn.small { min-height: 30px; padding: 4px 10px; font-size: 13px; }
+.btn.primary { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn.primary:hover:not(:disabled) { background: var(--ink); opacity: .88; }
+.btn.danger { color: var(--danger); border-color: var(--danger); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+.btn[aria-pressed="true"] { background: var(--ink); color: var(--bg); border-color: var(--ink); }
+.btn-row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; background: var(--surface); }
+.seg button { border: 0; background: transparent; padding: 4px 10px; min-height: 30px; cursor: pointer; font-size: 13px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--ink); color: var(--bg); }
+
+/* 카테고리 레이어 */
+.layers { display: flex; flex-direction: column; gap: 6px; }
+.lrow { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px; align-items: stretch; }
+.ltoggle { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 7px 10px; cursor: pointer; min-height: 38px; }
+.ltoggle:hover { background: var(--surface-2); }
+.lsw { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--swc); background: var(--swc); box-sizing: border-box; }
+.ltoggle[aria-pressed="false"] .lsw { background: transparent; }
+.ltoggle[aria-pressed="false"] .lname { color: var(--ink-2); text-decoration: line-through; text-decoration-color: var(--line); }
+.lname { font-weight: 500; overflow-wrap: anywhere; }
+.lcount { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 13px; }
+.lsolo { background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 0 10px; cursor: pointer; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; }
+.lsolo:hover { background: var(--surface-2); color: var(--ink); }
+
+.rlist { display: flex; flex-direction: column; gap: 6px; }
+.rrow { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 10px; width: 100%; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; align-items: start; }
+.rrow:hover { background: var(--surface-2); }
+.rico { color: var(--rc); display: inline-flex; padding-top: 2px; }
+.rtitle { font-weight: 500; overflow-wrap: anywhere; display: block; }
+.rsub { color: var(--ink-2); font-size: 12.5px; display: block; overflow-wrap: anywhere; }
+.empty { color: var(--ink-2); border: 1px dashed var(--line); border-radius: 6px; padding: 12px; font-size: 13px; }
+
+.mapwrap { position: relative; min-width: 0; min-height: 420px; }
+#map { position: absolute; inset: 0; min-height: 420px; background: #E3E8E5; }
+.overlay { position: absolute; z-index: 800; }
+.tools { top: 10px; left: max(10px, env(safe-area-inset-left, 0px)); max-width: calc(100% - 150px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; display: flex; flex-direction: column; gap: 8px; box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+.who { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.dot { width: 14px; height: 14px; border-radius: 50%; background: var(--swc, var(--line)); flex: none; }
+.who select { min-width: 0; flex: 1; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); padding: 4px 6px; min-height: 32px; }
+.kinds { display: flex; gap: 6px; }
+.kinds .btn { flex: 1; padding-inline: 8px; }
+.basesw { top: 10px; right: max(10px, env(safe-area-inset-right, 0px)); box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+.layerbox { top: 50px; right: max(10px, env(safe-area-inset-right, 0px)); display: flex; flex-direction: column; align-items: flex-end; gap: 6px; max-width: calc(100% - 20px); }
+.layerbtn { box-shadow: 0 1px 6px rgba(0,0,0,.18); }
+.layerpanel { background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px; width: 230px; max-width: 100%; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; box-shadow: 0 1px 8px rgba(0,0,0,.22); max-height: 52vh; overflow-y: auto; }
+.layerpanel .ltoggle { padding: 4px 8px; min-height: 32px; }
+.layerpanel .btn-row { gap: 6px; }
+.drawbar { left: 50%; transform: translateX(-50%); bottom: 44px; width: max-content; max-width: calc(100% - 20px); background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; justify-content: center; box-shadow: 0 1px 8px rgba(0,0,0,.22); }
+.drawbar .msg { display: flex; align-items: center; gap: 8px; }
+
+.setup { inset: 0; display: grid; place-items: center; padding: 16px; background: rgba(8, 14, 12, .35); z-index: 900; }
+.setup-card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 18px; width: min(460px, 100%); max-height: 100%; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; box-shadow: 0 6px 30px rgba(0,0,0,.3); box-sizing: border-box; }
+.setup-card h2 { font-size: 16px; letter-spacing: 0; color: var(--ink); }
+.setup-card ol { margin: 0; padding-left: 20px; display: flex; flex-direction: column; gap: 6px; }
+.setup-card code { background: var(--surface-2); padding: 1px 5px; border-radius: 4px; font-size: 12.5px; overflow-wrap: anywhere; }
+.setup-err { color: var(--danger); font-size: 13px; }
+
+.pop { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 8px; overflow: hidden; width: 270px; max-width: calc(100vw - 48px); box-shadow: 0 2px 12px rgba(0,0,0,.3); font: 14px/1.5 var(--font); }
+.pop-head { padding: 8px 8px 8px 12px; display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 13px; }
+.pop-head .grow { flex: 1; }
+.pop-x { border: 0; background: transparent; color: inherit; cursor: pointer; font-size: 18px; line-height: 1; padding: 2px 6px; border-radius: 4px; }
+.pop-body { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 8px; max-height: 40vh; overflow-y: auto; }
+.pop-title { font-weight: 700; font-size: 15px; overflow-wrap: anywhere; }
+.kvs { margin: 0; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 3px 12px; }
+.kvs dt { color: var(--ink-2); font-size: 12.5px; padding-top: 1px; }
+.kvs dd { margin: 0; overflow-wrap: anywhere; white-space: pre-wrap; }
+.kvs dd.none { color: var(--ink-2); }
+.pop-act { display: flex; gap: 8px; padding-top: 2px; }
+
+.scrim { position: fixed; inset: 0; z-index: 2000; background: rgba(8, 14, 12, .5); display: grid; place-items: center;
+  padding: max(16px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(16px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.sheet { background: var(--surface); color: var(--ink); width: min(460px, 100%); max-height: 100%; overflow-y: auto; border-radius: 10px; padding: 20px; display: flex; flex-direction: column; gap: 14px; box-shadow: 0 6px 30px rgba(0,0,0,.35); box-sizing: border-box; }
+.sheet h2 { font-size: 17px; letter-spacing: 0; color: var(--ink); }
+.fgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fgrid .wide { grid-column: 1 / -1; }
+.catpick { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 6px; }
+.catopt { display: flex; align-items: center; gap: 8px; text-align: left; background: var(--surface); border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px; cursor: pointer; min-height: 34px; }
+.catopt .lsw { width: 14px; height: 14px; flex: none; }
+.catopt[aria-pressed="true"] { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); font-weight: 700; }
+.err { color: var(--danger); font-size: 13px; }
+.sheet-act { display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+.toastwrap { position: fixed; left: 0; right: 0; bottom: 0; z-index: 3000; display: flex; justify-content: center; pointer-events: none;
+  padding: 0 max(16px, env(safe-area-inset-right, 0px)) calc(16px + env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+.toast { background: var(--ink); color: var(--bg); border-radius: 8px; padding: 9px 14px; max-width: 460px; opacity: 0; transform: translateY(6px); transition: opacity .18s, transform .18s; }
+.toast.show { opacity: 1; transform: none; }
+.toast.err { background: var(--danger); color: var(--surface); }
+@media (prefers-reduced-motion: reduce) { .toast { transition: none; } }
+
+@media (max-width: 820px) {
+  .app { display: flex; flex-direction: column; height: auto; min-height: 100%; }
+  .mapwrap { order: -1; height: 66vh; height: 66svh; min-height: 360px; flex: none; }
+  .side { overflow: visible; border-right: 0; border-top: 1px solid var(--line); }
+  }
+@media (max-width: 480px) {
+  .fgrid { grid-template-columns: 1fr; }
+  .tools { max-width: calc(100% - 130px); }
+  }
+
+/* ===== 뉴모피즘 · 지도 위에 떠 있는 패널 ===== */
+:root {
+  --bg: #FAFAFB; --surface: #FBFBFC; --surface-2: #F1F2F4; --ink: #1C2127; --ink-2: #565D68; --line: #E4E6EA;
+  --sd: rgba(110,118,132,.24); --sl: rgba(255,255,255,.95);
+  --raise: 4px 4px 9px var(--sd), -3px -3px 8px var(--sl);
+  --raise-s: 2px 2px 5px var(--sd), -2px -2px 5px var(--sl);
+  --inset: inset 2px 2px 5px var(--sd), inset -2px -2px 5px var(--sl);
+  --float: 5px 7px 16px var(--sd), -3px -3px 10px var(--sl);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) { --bg: #23272E; --surface: #23272E; --surface-2: #2B3038; --ink: #E8EDF4; --ink-2: #A5B0BF; --line: #323A46; --sd: rgba(0,0,0,.5); --sl: rgba(255,255,255,.06); }
+}
+:root[data-theme="dark"] { --bg: #23272E; --surface: #23272E; --surface-2: #2B3038; --ink: #E8EDF4; --ink-2: #A5B0BF; --line: #323A46; --sd: rgba(0,0,0,.5); --sl: rgba(255,255,255,.06); }
+
+.field, .btn, .seg, .ltoggle, .lsolo, .rrow, .catopt, .layerpanel, .tools, .drawbar, .pop, .sheet, .setup-card, .notice, .who select { border: 0; }
+.btn { border-radius: 12px; box-shadow: var(--raise-s); }
+.btn:hover:not(:disabled) { background: var(--surface); box-shadow: var(--raise); }
+.btn[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: var(--inset); }
+.btn.primary { background: var(--ink); color: var(--bg); box-shadow: var(--raise-s); }
+.btn.danger { border: 0; }
+.field, .who select { border-radius: 12px; box-shadow: var(--inset); }
+.seg { border-radius: 14px; padding: 3px; gap: 2px; box-shadow: var(--inset); overflow: visible; }
+.seg button { border-radius: 11px; }
+.seg button + button { border-left: 0; }
+.seg button[aria-pressed="true"] { background: var(--surface); color: var(--ink); font-weight: 700; box-shadow: var(--raise-s); }
+.ltoggle { border-radius: 14px; box-shadow: var(--raise-s); }
+.ltoggle:hover { background: var(--surface); }
+.ltoggle[aria-pressed="true"] { box-shadow: var(--inset); }
+.lsolo { border-radius: 14px; box-shadow: var(--raise-s); }
+.lsolo:hover { background: var(--surface); }
+.rrow { border-radius: 14px; box-shadow: var(--raise-s); }
+.rrow:hover { background: var(--surface); box-shadow: var(--raise); }
+.catopt { border-radius: 12px; box-shadow: var(--raise-s); }
+.catopt[aria-pressed="true"] { box-shadow: var(--inset); }
+.empty { border-radius: 14px; border: 0; box-shadow: var(--inset); }
+.notice { border-radius: 14px; background: var(--surface); box-shadow: var(--inset); }
+.tools, .drawbar, .layerpanel { border-radius: 20px; box-shadow: var(--float); }
+.basesw, .layerbtn { box-shadow: var(--float); }
+.pop { border: 0; border-radius: 20px; box-shadow: var(--float); }
+.sheet, .setup-card { border-radius: 26px; box-shadow: var(--float); }
+
+@media (min-width: 821px) {
+  .app { display: block; height: 100vh; height: 100dvh; }
+  .mapwrap { position: fixed; inset: 0; min-height: 0; }
+  .side { position: fixed; z-index: 900; left: 20px; top: 20px; bottom: 20px; width: 360px; border: 0; border-radius: 28px; box-shadow: var(--float); scrollbar-width: thin; }
+  .tools { left: 396px; top: 20px; }
+  .basesw { top: 20px; right: 20px; }
+  .layerbox { top: 64px; right: 20px; }
+  .drawbar { bottom: 28px; }
+}
+@media (max-width: 820px) {
+  .side { border-radius: 0; box-shadow: none; }
+}
+
+/* ===== 시안 C 스타일: 스위치형 레이어 토글 ===== */
+.layers .ltoggle, .layerpanel .ltoggle { background: transparent; box-shadow: none; padding: 6px 4px; grid-template-columns: minmax(0, 1fr) auto auto; }
+.layers .ltoggle:hover, .layerpanel .ltoggle:hover { background: transparent; }
+.ltoggle .lname { order: 1; }
+.ltoggle .lcount { order: 2; }
+.layers .ltoggle .lsw, .layerpanel .ltoggle .lsw { order: 3; position: relative; width: 44px; height: 24px; border: 0; border-radius: 12px; background: transparent; box-shadow: var(--inset); }
+.layers .ltoggle .lsw::after, .layerpanel .ltoggle .lsw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 18px; height: 18px; border-radius: 50%; background: var(--swc); box-shadow: 0 0 8px var(--swc); transition: transform .15s; transform: translateX(20px); }
+.layers .ltoggle[aria-pressed="false"] .lsw::after, .layerpanel .ltoggle[aria-pressed="false"] .lsw::after { background: #B4BBC6; box-shadow: none; transform: none; }
+.layers .ltoggle[aria-pressed="false"] .lname { text-decoration: none; }
+.lsolo { padding: 6px 10px; }
+@media (prefers-reduced-motion: reduce) { .layers .ltoggle .lsw::after, .layerpanel .ltoggle .lsw::after { transition: none; } }
+
+/* ===== 로그인·사진 ===== */
+.authbox { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.authbox .hint { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.pgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 8px; }
+.pitem { position: relative; aspect-ratio: 1; border-radius: 12px; overflow: hidden; box-shadow: var(--raise-s); background: var(--surface-2); }
+.pitem img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.pitem button { position: absolute; top: 4px; right: 4px; width: 24px; height: 24px; border: 0; border-radius: 50%; background: rgba(20,24,30,.75); color: #fff; cursor: pointer; font-size: 15px; line-height: 1; padding: 0; }
+.pgal { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.pthumb { border: 0; padding: 0; background: var(--surface-2); border-radius: 10px; overflow: hidden; cursor: zoom-in; aspect-ratio: 1; box-shadow: var(--raise-s); }
+.pthumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.lightbox { display: flex; flex-direction: column; gap: 12px; align-items: center; }
+.lightbox img { max-width: 100%; max-height: 68vh; border-radius: 12px; display: block; }
+.sheet.wide { width: min(760px, 100%); }
+
+/* 팝업 안 사진: 첫 장은 크게, 나머지는 작게 */
+.pop { width: 300px; }
+.pop .pgal { grid-template-columns: repeat(3, 1fr); }
+.pop .pthumb:first-child { grid-column: 1 / -1; aspect-ratio: 16 / 10; }
+
+/* 지도 위 장소 이름 라벨 */
+.mlabel { position: absolute; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none;
+  font: 700 11px/1.2 var(--font); color: #1C2127; letter-spacing: -0.01em;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff, 0 0 3px #fff, 0 0 4px #fff, 0 0 5px #fff; }
+.mlabel.p { transform: translate(15px, -50%); }
+.mlabel.c { transform: translate(-50%, -50%); text-align: center; }
+#map.nolabel .mlabel { display: none; }
+
+/* 여러 카테고리 */
+.cchips { display: flex; flex-wrap: wrap; gap: 6px; }
+.cchip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 500; padding: 3px 10px 3px 8px; border-radius: 999px; box-shadow: var(--inset); }
+.cchip i { width: 9px; height: 9px; border-radius: 50%; background: var(--cc); flex: none; }
+.catopt .pri { margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ink-2); }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="side" aria-label="기록 패널">
+    <div class="side-in">
+      <header class="head">
+        <h1>창신동 재개발 맵핑 지도</h1>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v20-multicat)</span></p>
+      </header>
+      <div class="authbox" id="authbox"></div>
+      <div class="notices" id="notices"></div>
+      <details class="notice" id="diag" hidden><summary>지도 진단 (지도가 안 보일 때 이 내용을 알려 주세요)</summary><pre id="diagOut"></pre></details>
+      <p class="summary" id="summary" aria-live="polite"></p>
+
+      <section class="block" aria-label="카테고리 레이어">
+        <div class="row-head"><h2>카테고리 레이어</h2>
+          <div class="btn-row"><button class="btn small" id="allOn" type="button">전체 보기</button><button class="btn small" id="allOff" type="button">모두 끄기</button></div>
+        </div>
+        <div class="layers" id="layers"></div>
+        <p class="hint">칸을 누르면 그 카테고리를 켜고 끕니다. ‘이것만’을 누르면 해당 카테고리만 지도에 남습니다.</p>
+      </section>
+
+      <section class="block" aria-label="기록">
+        <div class="row-head">
+          <h2>기록</h2>
+          <div class="seg" id="kindFilter" role="group" aria-label="유형 필터">
+            <button type="button" data-k="all" aria-pressed="true">전체</button>
+            <button type="button" data-k="point" aria-pressed="false">점</button>
+            <button type="button" data-k="line" aria-pressed="false">길</button>
+            <button type="button" data-k="area" aria-pressed="false">구역</button>
+          </div>
+        </div>
+        <ul class="rlist" id="rlist"></ul>
+      </section>
+
+      <section class="block" id="saveBlock" aria-label="저장과 내보내기">
+        <h2>저장·내보내기</h2>
+        <div class="btn-row">
+          <button class="btn small" id="expBackup" type="button">백업 저장</button>
+          <button class="btn small" id="impBackup" type="button">백업 불러오기</button>
+          <input type="file" id="impFile" accept=".json,application/json" hidden>
+        </div>
+        <div class="btn-row">
+          <button class="btn small" id="expGeo" type="button">GeoJSON</button>
+          <button class="btn small" id="expCsv" type="button">CSV</button>
+        </div>
+        <p class="hint" id="saveHint">기록은 이 브라우저에만 저장됩니다. 브라우저 데이터를 지우거나 다른 기기로 옮길 때를 위해 ‘백업 저장’으로 파일을 보관하세요. GeoJSON은 QGIS·ArcGIS에서, CSV는 엑셀에서 열 수 있습니다. 내보내기에는 꺼 둔 카테고리도 모두 들어갑니다.</p>
+      </section>
+    </div>
+  </aside>
+
+  <section class="mapwrap" id="mapwrap" aria-label="지도">
+    <div id="map"></div>
+    <div class="overlay tools" id="tools" hidden>
+      <div class="who"><span class="dot" id="whoDot"></span><select id="activeCat" aria-label="기록할 카테고리"></select></div>
+      <div class="kinds" role="group" aria-label="그릴 유형">
+        <button class="btn small" type="button" data-kind="point" aria-pressed="false"></button>
+        <button class="btn small" type="button" data-kind="line" aria-pressed="false"></button>
+        <button class="btn small" type="button" data-kind="area" aria-pressed="false"></button>
+      </div>
+    </div>
+    <div class="overlay seg basesw" id="baseSw" role="group" aria-label="배경 지도" hidden>
+      <button type="button" data-b="normal" aria-pressed="true">일반</button>
+      <button type="button" data-b="hybrid" aria-pressed="false">위성</button>
+    </div>
+    <div class="overlay layerbox" id="layerbox" hidden>
+      <button class="btn small layerbtn" id="layerBtn" type="button" aria-expanded="false">레이어</button>
+      <div class="layerpanel" id="layerpanel" hidden></div>
+    </div>
+    <div class="overlay drawbar" id="drawbar" hidden></div>
+    <div class="overlay setup" id="setup" hidden></div>
+  </section>
+</div>
+
+<div id="modalRoot"></div>
+<datalist id="whoList"></datalist>
+<div class="toastwrap"><div class="toast" id="toast" role="status" aria-live="polite"></div></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ================= 설정 =================
+   네이버 클라우드 플랫폼에서 발급받은 Maps Client ID(Key ID)를 아래에 넣거나,
+   비워 두고 화면에 나오는 입력칸에 붙여 넣으면 이 브라우저에 저장됩니다. */
+var CONFIG = {
+  NAVER_KEY_ID: 'h8aa2w2wv8',
+  SB_URL: 'https://qdhgkuruidqlpnmqgfzz.supabase.co',
+  SB_KEY: 'sb_publishable_PtOavz6n71vLjHC4l1KA_A_wZmpZZEg',
+  PREF_KEY: 'changsin-community-prefs-v3',
+  MAX_PHOTOS: 5,
+  STORAGE_KEY: 'changsin-community-map-v2',
+  KEY_STORAGE: 'changsin-naver-key'
+};
+
+/* 처음 열 때 보여 줄 위치 (종로구 창신동 부근). 지도는 어디로든 자유롭게 옮길 수 있습니다. */
+var START = { lat: 37.57604, lng: 127.01371, zoom: 16 };
+
+/* 카테고리 7종과 색 (지도 위에서 서로 구분되도록 색상환에 고르게 배치) */
+var CATS = [
+  { id: 'attach',     name: '애착장소',   color: '#E0457B' },
+  { id: 'improve',    name: '개선필요',   color: '#F08C00' },
+  { id: 'sewing',     name: '봉제산업',   color: '#1C7ED6' },
+  { id: 'demo',       name: '인구지형',   color: '#2F9E44' },
+  { id: 'heritage',   name: '문화유산',   color: '#7048E8' },
+  { id: 'nickname',   name: '비공식지명', color: '#0CA5B0' },
+  { id: 'researcher', name: '연구자맵핑', color: '#8A5A2B' }
+];
+var CAT = {}; CATS.forEach(function (c) { CAT[c.id] = c; });
+
+var AGES = ['10대 이하','20대','30대','40대','50대','60대','70대','80대 이상'];
+var KINDS = {
+  point: { label: '점', long: '장소 (점)', ph: '예: 봉제거리 입구' },
+  line:  { label: '길',  long: '길 (선)',   ph: '예: 시장 가는 길' },
+  area:  { label: '구역', long: '구역 (면)', ph: '예: 낙산 아래 주거지' }
+};
+var ICONS = {
+  point: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="4.5" fill="currentColor"/></svg>',
+  line: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M2 12 L6 5 L10 10 L14 3" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+  area: '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><path d="M3 5 L9 2.5 L13.5 7 L10.5 13 L4 12 Z" fill="currentColor" fill-opacity=".28" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>'
+};
+
+/* ================= 상태 ================= */
+var S = {
+  features: new Map(), hiddenCats: new Set(),
+  activeCat: CATS[0].id, mode: null, pts: [], filter: 'all',
+  last: { who: '', age: '', stay: '' },
+  meta: { lastBackup: 0, changes: 0 },
+  mapReady: false, openId: null, storageOk: true, panelOpen: false
+};
+var layers = new Map();
+var map = null, iw = null, rubber = null, draftItems = [];
+
+/* ================= 도우미 ================= */
+function $(s, el) { return (el || document).querySelector(s); }
+function txt(x) { return x == null ? '' : String(x); }
+function h(tag, props) {
+  var el = document.createElement(tag);
+  if (props) Object.keys(props).forEach(function (k) {
+    var v = props[k];
+    if (v == null || v === false) return;
+    if (k === 'class') el.className = v;
+    else if (k === 'style') el.style.cssText = v;
+    else if (k.slice(0, 2) === 'on') el.addEventListener(k.slice(2).toLowerCase(), v);
+    else el.setAttribute(k, v === true ? '' : v);
+  });
+  var kids = Array.prototype.slice.call(arguments, 2);
+  kids.forEach(function add(kid) {
+    if (kid == null || kid === false) return;
+    if (Array.isArray(kid)) { kid.forEach(add); return; }
+    el.append(kid.nodeType ? kid : document.createTextNode(String(kid)));
+  });
+  return el;
+}
+function icon(kind) { var s = h('span'); s.innerHTML = ICONS[kind]; s.style.display = 'inline-flex'; return s; }
+function onColor(hex) {
+  var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+  return (0.299 * r + 0.587 * g + 0.114 * b) > 150 ? '#14110F' : '#FFFFFF';
+}
+function catOf(f) { return CAT[f && f.cat] || CATS[0]; }
+/* 한 기록이 여러 카테고리에 속할 수 있다. cat = 대표(첫 번째), cats = 전체 */
+function catsOf(f) {
+  var a = (f && Array.isArray(f.cats) ? f.cats : []).filter(function (c) { return CAT[c]; });
+  if (f && CAT[f.cat] && a.indexOf(f.cat) < 0) a.unshift(f.cat);
+  return a.filter(function (c, i) { return a.indexOf(c) === i; });
+}
+function visCats(f) { return catsOf(f).filter(function (c) { return !S.hiddenCats.has(c); }); }
+function isVisible(f) { return visCats(f).length > 0; }
+function colorsOf(f) { var v = visCats(f); return (v.length ? v : catsOf(f)).map(function (c) { return CAT[c].color; }); }
+function catNames(f) { return catsOf(f).map(function (c) { return CAT[c].name; }).join(' · '); }
+function r6(v) { return Math.round(v * 1e6) / 1e6; }
+function pad2(n) { return String(n).padStart(2, '0'); }
+function today() { var d = new Date(); return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()); }
+function isNarrow() { return window.matchMedia('(max-width: 820px)').matches; }
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function LL(q) { return new naver.maps.LatLng(q[0], q[1]); }
+
+var toastT;
+function toast(msg, kind) {
+  var t = $('#toast'); t.textContent = msg; t.className = 'toast show' + (kind ? ' ' + kind : '');
+  clearTimeout(toastT); toastT = setTimeout(function () { t.className = 'toast'; }, 4500);
+}
+var notices = {};
+function setNotice(key, text) {
+  if (text) notices[key] = text; else delete notices[key];
+  var box = $('#notices'); box.textContent = '';
+  Object.keys(notices).forEach(function (k) { box.append(h('p', { class: 'notice' }, notices[k])); });
+}
+function validFeature(f) {
+  if (!f || !KINDS[f.kind] || !CAT[f.cat] || !Array.isArray(f.pts)) return false;
+  var n = f.pts.length;
+  if (f.kind === 'point' && n < 1) return false;
+  if (f.kind === 'line' && n < 2) return false;
+  if (f.kind === 'area' && n < 3) return false;
+  return f.pts.every(function (q) {
+    return Array.isArray(q) && isFinite(q[0]) && isFinite(q[1]) && Math.abs(q[0]) <= 90 && Math.abs(q[1]) <= 180;
+  });
+}
+function centerOf(f) {
+  var la = 0, ln = 0;
+  f.pts.forEach(function (q) { la += q[0]; ln += q[1]; });
+  return [la / f.pts.length, ln / f.pts.length];
+}
+
+/* ================= 저장 (서버 + 브라우저 설정) ================= */
+var SB = { url: String(CONFIG.SB_URL || '').replace(/\/+$/, ''), key: CONFIG.SB_KEY || '' };
+var SERVER = !!(SB.url && SB.key);
+var AUTH_KEY = 'changsin-sb-session';
+var session = null;            /* 로그인한 연구자 */
+var pending = new Map();       /* 서버에 아직 못 올린 변경: id -> 'put' | 'del' */
+var legacy = new Map();        /* 예전에 이 브라우저에만 저장돼 있던 기록 */
+S.canEdit = !SERVER;
+
+function setSession(v) {
+  session = v;
+  try { if (v) localStorage.setItem(AUTH_KEY, JSON.stringify(v)); else localStorage.removeItem(AUTH_KEY); } catch (e) {}
+  S.canEdit = !SERVER || !!session;
+}
+function readSession() {
+  try { var r = localStorage.getItem(AUTH_KEY); if (r) { var v = JSON.parse(r); if (v && v.access_token && v.refresh_token) session = v; } } catch (e) {}
+  S.canEdit = !SERVER || !!session;
+}
+function parseAuth(r) {
+  return r.json().then(function (j) {
+    if (!r.ok) throw new Error(j.error_description || j.msg || j.message || ('HTTP ' + r.status));
+    return { access_token: j.access_token, refresh_token: j.refresh_token,
+      expires_at: j.expires_at || (Math.floor(Date.now() / 1000) + (j.expires_in || 3600)), email: (j.user && j.user.email) || '' };
+  });
+}
+function sbLogin(email, pw) {
+  return fetch(SB.url + '/auth/v1/token?grant_type=password', { method: 'POST',
+    headers: { apikey: SB.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ email: email, password: pw }) }).then(parseAuth);
+}
+function ensureToken() {
+  if (!session || session.expires_at * 1000 - Date.now() > 60000) return Promise.resolve();
+  return fetch(SB.url + '/auth/v1/token?grant_type=refresh_token', { method: 'POST',
+    headers: { apikey: SB.key, 'Content-Type': 'application/json' }, body: JSON.stringify({ refresh_token: session.refresh_token }) })
+    .then(parseAuth).then(function (v) { v.email = v.email || session.email; setSession(v); },
+      function () { setSession(null); renderUI(); throw new Error('로그인이 만료되었습니다. 다시 로그인하세요.'); });
+}
+function sbReq(path, opt, auth) {
+  return (auth ? ensureToken() : Promise.resolve()).then(function () {
+    opt = opt || {}; var hd = { apikey: SB.key };
+    if (auth && session) hd.Authorization = 'Bearer ' + session.access_token;
+    opt.headers = Object.assign(hd, opt.headers || {});
+    return fetch(SB.url + path, opt);
+  }).then(function (r) {
+    if (r.ok) return r;
+    return r.text().then(function (t) {
+      var m = t; try { var j = JSON.parse(t); m = j.message || j.error || j.msg || t; } catch (e) {}
+      throw new Error(m || ('HTTP ' + r.status));
+    });
+  });
+}
+function sbPut(id, f) {
+  return sbReq('/rest/v1/records?on_conflict=id', { method: 'POST',
+    headers: { 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: JSON.stringify([{ id: id, data: f, updated_at: new Date().toISOString() }]) }, true);
+}
+function sbDel(id) { return sbReq('/rest/v1/records?id=eq.' + encodeURIComponent(id), { method: 'DELETE' }, true); }
+function sbUpload(path, blob) {
+  return sbReq('/storage/v1/object/photos/' + path, { method: 'POST', headers: { 'Content-Type': 'image/jpeg', 'x-upsert': 'false' }, body: blob }, true);
+}
+function sbRemove(paths) {
+  if (!paths || !paths.length) return Promise.resolve();
+  return sbReq('/storage/v1/object/photos', { method: 'DELETE', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ prefixes: paths }) }, true).catch(function () {});
+}
+function photoUrl(path) { return SB.url + '/storage/v1/object/public/photos/' + path.split('/').map(encodeURIComponent).join('/'); }
+
+function flush() {
+  if (!SERVER || !session) return Promise.resolve();
+  var ids = Array.from(pending.keys());
+  return ids.reduce(function (p, id) {
+    return p.then(function () {
+      var op = pending.get(id), f = S.features.get(id);
+      var job = (op === 'del' || !f) ? sbDel(id) : sbPut(id, f);
+      return job.then(function () { if (pending.get(id) === op) pending.delete(id); });
+    });
+  }, Promise.resolve()).then(function () { setNotice('sync', null); renderAuth(); },
+    function (e) { setNotice('sync', '서버에 저장하지 못했습니다(' + e.message + '). 새로고침하면 이 변경이 사라질 수 있으니 위의 ‘다시 시도’를 누르세요.'); renderAuth(); throw e; });
+}
+function queue(id, op) { pending.set(id, op); renderAuth(); return flush(); }
+
+function loadServer() {
+  if (!SERVER) return Promise.resolve();
+  return sbReq('/rest/v1/records?select=id,data&limit=5000').then(function (r) { return r.json(); }).then(function (rows) {
+    var nm = new Map();
+    rows.forEach(function (r) {
+      if (!validFeature(r.data)) return;
+      var old = S.features.get(r.id);
+      nm.set(r.id, (old && JSON.stringify(old) === JSON.stringify(r.data)) ? old : r.data);
+    });
+    pending.forEach(function (op, id) { if (op === 'del') nm.delete(id); else if (S.features.has(id)) nm.set(id, S.features.get(id)); });
+    S.features = nm; setNotice('load', null); S.loaded = true;
+    syncMap(); renderUI();
+  }, function (e) { setNotice('load', '서버에서 기록을 불러오지 못했습니다: ' + e.message); });
+}
+
+function loadStore() {
+  try {
+    if (SERVER) {
+      try {
+        var lr = localStorage.getItem(CONFIG.STORAGE_KEY);
+        if (lr && !localStorage.getItem('changsin-legacy-migrated')) {
+          var ld = JSON.parse(lr);
+          Object.keys(ld.features || {}).forEach(function (id) { if (validFeature(ld.features[id])) legacy.set(id, ld.features[id]); });
+        }
+      } catch (e) {}
+    }
+    var raw = localStorage.getItem(SERVER ? CONFIG.PREF_KEY : CONFIG.STORAGE_KEY);
+    if (!raw) return;
+    var d = JSON.parse(raw);
+    if (!SERVER) Object.keys(d.features || {}).forEach(function (id) { S.features.set(id, d.features[id]); });
+    if (d.meta) S.meta = { lastBackup: d.meta.lastBackup || 0, changes: d.meta.changes || 0 };
+    if (Array.isArray(d.hiddenCats)) d.hiddenCats.forEach(function (c) { if (CAT[c]) S.hiddenCats.add(c); });
+    if (d.activeCat && CAT[d.activeCat]) S.activeCat = d.activeCat;
+    if (d.last) S.last = { who: txt(d.last.who), age: txt(d.last.age), stay: txt(d.last.stay) };
+  } catch (e) {
+    S.storageOk = false;
+    setNotice('store', '저장된 설정을 읽지 못했습니다. 브라우저 설정에서 저장소 사용이 막혀 있을 수 있습니다.');
+  }
+}
+function persist() {
+  try {
+    var o = { v: 3, meta: S.meta, hiddenCats: Array.from(S.hiddenCats), activeCat: S.activeCat, last: S.last };
+    if (!SERVER) { o.v = 2; o.features = mapToObj(S.features); }
+    localStorage.setItem(SERVER ? CONFIG.PREF_KEY : CONFIG.STORAGE_KEY, JSON.stringify(o));
+    if (!S.storageOk) { S.storageOk = true; setNotice('store', null); }
+    return true;
+  } catch (e) {
+    S.storageOk = false;
+    if (!SERVER) setNotice('store', '이 브라우저에 기록을 저장하지 못했습니다. 지금 ‘백업 저장’으로 파일을 내려받아 보관하세요.');
+    return false;
+  }
+}
+function commit() {
+  S.meta.changes = (S.meta.changes || 0) + 1;
+  persist(); syncMap(); renderUI();
+}
+function saveView() { persist(); }
+
+/* ================= 지도 ================= */
+function showSetup(reason) {
+  var box = $('#setup'); box.textContent = ''; box.hidden = false;
+  var saved = ''; try { saved = localStorage.getItem(CONFIG.KEY_STORAGE) || ''; } catch (e) {}
+  var input = h('input', { class: 'field', id: 'keyIn', type: 'text', placeholder: 'Client ID (Key ID) 붙여 넣기', autocomplete: 'off', value: saved });
+  var origin = location.protocol === 'file:' ? '' : location.origin;
+  var copy = h('button', { class: 'btn small', type: 'button', onclick: function () {
+    try { navigator.clipboard.writeText(origin).then(function () { toast('주소를 복사했습니다.'); }, function () { toast('복사하지 못했습니다. 직접 선택해서 복사하세요.', 'err'); }); }
+    catch (e) { toast('복사하지 못했습니다. 직접 선택해서 복사하세요.', 'err'); }
+  } }, '복사');
+  box.append(h('div', { class: 'setup-card' },
+    h('h2', null, '네이버 지도 연결'),
+    reason ? h('p', { class: 'setup-err' }, reason) : null,
+    origin ? h('div', null, h('span', { class: 'lbl' }, '네이버 콘솔의 Web 서비스 URL에 정확히 이 주소를 등록하세요'),
+      h('div', { class: 'btn-row', style: 'align-items:center' }, h('code', null, origin), copy),
+      h('p', { class: 'hint' }, '글자 하나(하이픈 포함)까지 같아야 합니다. 마지막의 / 와 경로는 붙이지 않습니다. 등록 후 1~2분 뒤 새로고침하세요.'))
+      : h('p', { class: 'setup-err' }, '지금은 파일로 직접 열려 있어 네이버 지도가 동작하지 않습니다. 웹 주소(http://localhost 또는 호스팅 주소)로 여세요.'),
+    h('div', null, h('label', { class: 'lbl', for: 'keyIn' }, 'Client ID (Key ID)'), input),
+    h('div', { class: 'sheet-act' },
+      h('button', { class: 'btn', type: 'button', onclick: function () { location.reload(); } }, '다시 시도'),
+      h('button', { class: 'btn primary', type: 'button', onclick: function () {
+        var v = input.value.trim(); if (!v) { input.focus(); return; }
+        try { localStorage.setItem(CONFIG.KEY_STORAGE, v); } catch (e) {}
+        location.reload();
+      } }, '저장하고 불러오기'))));
+}
+/* 진단: 지도가 안 뜰 때 화면에서 원인을 확인할 수 있게 한다 */
+var BUILD = 'v11-neo'
+var D = { key: '', loaded: false, ver: '', auth: false, tiles: false, msgs: [] };
+function renderDiag() {
+  var el = $('#diagOut'); if (!el) return;
+  var c = $('#map');
+  el.textContent = [
+    '빌드: ' + BUILD,
+    '주소: ' + location.origin,
+    '키: ' + (D.key || '없음'),
+    '네이버 스크립트: ' + (D.loaded ? '불러옴 (' + (D.ver || '버전 미확인') + ')' : '아직'),
+    '지도 칸 크기: ' + c.offsetWidth + ' x ' + c.offsetHeight,
+    '인증 실패 신호: ' + (D.auth ? '받음' : '없음'),
+    '배경 타일 신호: ' + (D.tiles ? '받음' : '아직'),
+    '브라우저 메시지:'
+  ].concat(D.msgs.length ? D.msgs : ['(없음)']).join('\n');
+}
+function showDiag() { var d = $('#diag'); d.hidden = false; d.open = true; renderDiag(); }
+['error', 'warn'].forEach(function (k) {
+  var orig = console[k];
+  console[k] = function () {
+    try {
+      var m = Array.prototype.slice.call(arguments).map(function (a) { return a && a.message ? a.message : String(a); }).join(' ');
+      D.msgs.push(k + ': ' + m.slice(0, 400)); if (D.msgs.length > 6) D.msgs.shift(); renderDiag();
+    } catch (e) {}
+    return orig.apply(console, arguments);
+  };
+});
+function getKey() {
+  if (CONFIG.NAVER_KEY_ID) return CONFIG.NAVER_KEY_ID;
+  try { return localStorage.getItem(CONFIG.KEY_STORAGE) || ''; } catch (e) { return ''; }
+}
+function loadNaver() {
+  var key = getKey();
+  if (!key) { showSetup(''); return; }
+  D.key = key.slice(0, 4) + '… (' + key.length + '자)';
+  window.navermap_authFailure = function () {
+    D.auth = true; showDiag();
+    showSetup('네이버 지도 인증에 실패했습니다. 대부분 Web 서비스 URL에 현재 주소가 그대로 등록되어 있지 않아서입니다. 아래 주소를 확인하세요.');
+  };
+  var s = document.createElement('script');
+  s.src = 'https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=' + encodeURIComponent(key);
+  s.onload = function () {
+    if (!(window.naver && naver.maps)) { showSetup('네이버 지도 스크립트를 불러오지 못했습니다.'); return; }
+    D.loaded = true; D.ver = 'v' + (naver.maps.VERSION || '?');
+    try { initMap(); }
+    catch (e) { setNotice('init', '지도를 만드는 중 오류가 났습니다: ' + (e && e.message ? e.message : e)); showDiag(); console.error(e); }
+  };
+  s.onerror = function () { showSetup('네이버 지도 스크립트를 불러오지 못했습니다. 인터넷 연결을 확인하세요.'); };
+  document.head.append(s);
+}
+function ensureMapHeight() { /* 예전 보정 제거: 높이는 CSS가 정합니다 */ var w = $('#mapwrap'); w.style.height = ''; w.style.minHeight = ''; }
+function initMap() {
+  ensureMapHeight();
+  var N = naver.maps;
+  map = new N.Map('map', {
+    center: new N.LatLng(START.lat, START.lng), zoom: START.zoom, minZoom: 6, maxZoom: 21,
+    zoomControl: true, zoomControlOptions: { position: N.Position.RIGHT_BOTTOM, style: N.ZoomControlStyle.SMALL },
+    scaleControl: true, mapDataControl: false, mapTypeControl: false
+  });
+
+  /* 네이버 지도는 칸 크기가 나중에 바뀌어도 스스로 다시 계산하지 않는다.
+     칸 크기가 바뀔 때마다 새 크기를 직접 알려 준다. */
+  var mapBox = $('#map'), lastW = 0, lastH = 0;
+  function fitSize() {
+    /* 레이아웃(CSS)에 의존하지 않고, 데스크톱에서는 창 크기로 지도 칸을 직접 정한다 */
+    var side = document.querySelector('.side');
+    if (window.innerWidth > 820 && side) {
+      var sw = 0; /* 패널은 지도 위에 떠 있으므로 지도는 화면 전체 */
+      mapBox.style.position = 'fixed';
+      mapBox.style.left = sw + 'px'; mapBox.style.top = '0';
+      mapBox.style.right = 'auto'; mapBox.style.bottom = 'auto';
+      mapBox.style.width = Math.max(300, window.innerWidth - sw) + 'px';
+      mapBox.style.height = window.innerHeight + 'px';
+      mapBox.style.zIndex = '1';
+    } else {
+      ['position','left','top','right','bottom','width','height','zIndex'].forEach(function (k) { mapBox.style[k] = ''; });
+    }
+    var w = mapBox.clientWidth, h = mapBox.clientHeight;
+    if (w < 50 || h < 50 || (w === lastW && h === lastH)) return;
+    lastW = w; lastH = h;
+    try { map.setSize(new N.Size(w, h)); } catch (e) {}
+    try { N.Event.trigger(map, 'resize'); } catch (e) {}
+  }
+  fitSize();
+  if (window.ResizeObserver) new ResizeObserver(fitSize).observe(mapBox);
+  window.addEventListener('resize', fitSize);
+  window.addEventListener('load', fitSize);
+  [200, 800, 2000, 4000].forEach(function (t) { setTimeout(fitSize, t); });
+
+  /* 지도 배경이 뜨지 않을 때 원인을 화면에 알려 준다. 네이버는 인증에 실패하면 빈 화면만 남기는 경우가 많다. */
+  var tilesSeen = false;
+  function labelZoom() { $('#map').classList.toggle('nolabel', map.getZoom() < 16); }
+  N.Event.addListener(map, 'zoom_changed', labelZoom); labelZoom();
+  N.Event.addListener(map, 'tilesloaded', function () { tilesSeen = true; D.tiles = true; if (!D.auth) { setNotice('tiles', null); $('#diag').hidden = true; } });
+  setTimeout(function () { try { N.Event.trigger(map, 'resize'); } catch (e) {} }, 600);
+  setTimeout(function () {
+    if (tilesSeen) return;
+    showDiag();
+    setNotice('tiles', '지도 배경이 아직 뜨지 않았습니다. 지도가 정상으로 보이면 이 안내는 무시하세요. 보이지 않는다면 네이버 클라우드 콘솔의 Web 서비스 URL에 정확히 ' + location.origin + ' 을(를) 등록했는지 확인하세요(마지막 / 와 경로 없이). 등록 후 1~2분 뒤 새로고침하세요.');
+  }, 8000);
+
+  iw = new N.InfoWindow({ content: '', borderWidth: 0, backgroundColor: 'transparent', disableAnchor: true, pixelOffset: new N.Point(0, -14), zIndex: 2000 });
+
+  N.Event.addListener(map, 'click', function (e) { if (S.mode) handlePoint(e.coord); else closePopup(); });
+  N.Event.addListener(map, 'mousemove', function (e) {
+    if (rubber && S.pts.length) rubber.setPath([LL(S.pts[S.pts.length - 1]), e.coord]);
+  });
+
+  S.mapReady = true;
+  $('#setup').hidden = true; $('#baseSw').hidden = false; $('#layerbox').hidden = false;
+  document.querySelectorAll('#baseSw button').forEach(function (b) {
+    b.addEventListener('click', function () {
+      map.setMapTypeId(b.dataset.b === 'hybrid' ? N.MapTypeId.HYBRID : N.MapTypeId.NORMAL);
+      document.querySelectorAll('#baseSw button').forEach(function (x) { x.setAttribute('aria-pressed', String(x === b)); });
+    });
+  });
+  syncMap(); renderUI();
+}
+
+/* ================= 기록 표시 ================= */
+function closePopup() { if (iw) iw.close(); S.openId = null; }
+function openPopup(id, coord) {
+  var f = S.features.get(id); if (!f || !iw) return;
+  S.openId = id;
+  iw.setContent(popupFor(id));
+  iw.open(map, coord || LL(centerOf(f)));
+}
+function popupFor(id) {
+  var f = S.features.get(id);
+  if (!f) return h('div');
+  var vc = visCats(f), c = CAT[vc[0] || catsOf(f)[0]] || catOf(f), fg = onColor(c.color);
+  function kv(k, v) { var e = txt(v).trim(); return [h('dt', null, k), h('dd', { class: e ? '' : 'none' }, e || '미기재')]; }
+  var body = h('div', { class: 'pop-body' },
+    h('div', { class: 'pop-title' }, txt(f.title).trim() || '(장소 이름 없음)'),
+    h('div', { class: 'cchips' }, catsOf(f).map(function (k) { return h('span', { class: 'cchip', style: '--cc:' + CAT[k].color }, h('i'), CAT[k].name); })),
+    h('dl', { class: 'kvs' }, kv('참여자', f.who), kv('연령대', f.age), kv('거주기간', f.stay), kv('내용', f.content)));
+  if (SERVER && Array.isArray(f.photos) && f.photos.length) {
+    body.append(h('div', { class: 'pgal' }, f.photos.map(function (p, i) {
+      return h('button', { class: 'pthumb', type: 'button', 'aria-label': '사진 ' + (i + 1) + ' 크게 보기', onclick: function () { openPhoto(f.photos, i); } },
+        h('img', { src: photoUrl(p), alt: '현장 사진 ' + (i + 1), loading: 'lazy' }));
+    })));
+  }
+  if (S.canEdit) {
+    var del = h('button', { class: 'btn small', type: 'button' }, '삭제');
+    armDelete(del, function () { closePopup(); deleteRecord(id); });
+    body.append(h('div', { class: 'pop-act' },
+      h('button', { class: 'btn small', type: 'button', onclick: function () { closePopup(); openRecordForm({ mode: 'edit', id: id }); } }, '수정'), del));
+  }
+  return h('div', { class: 'pop' },
+    h('div', { class: 'pop-head', style: 'background:' + c.color + ';color:' + fg }, icon(f.kind), h('span', { class: 'grow' }, catNames(f) + ' · ' + KINDS[f.kind].label),
+      h('button', { class: 'pop-x', type: 'button', 'aria-label': '닫기', onclick: closePopup }, '×')),
+    body);
+}
+function armDelete(btn, run) {
+  var armed = false, t;
+  btn.addEventListener('click', function () {
+    if (!armed) {
+      armed = true; btn.textContent = '정말 삭제'; btn.classList.add('danger');
+      t = setTimeout(function () { armed = false; btn.textContent = '삭제'; btn.classList.remove('danger'); }, 4000);
+    } else { clearTimeout(t); run(); }
+  });
+}
+function lineMid(pts) {
+  var tot = 0, seg = [];
+  for (var i = 1; i < pts.length; i++) { var d = Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); seg.push(d); tot += d; }
+  var half = tot / 2, acc = 0;
+  for (var j = 0; j < seg.length; j++) {
+    if (acc + seg[j] >= half) { var t = seg[j] ? (half - acc) / seg[j] : 0; return [pts[j][0] + (pts[j + 1][0] - pts[j][0]) * t, pts[j][1] + (pts[j + 1][1] - pts[j][1]) * t]; }
+    acc += seg[j];
+  }
+  return pts[0];
+}
+function buildOverlays(id, f) {
+  var N = naver.maps, colors = colorsOf(f), col = colors[0], items = [], path = f.pts.map(LL), clickable = [];
+  var bg = colors.length > 1 ? 'conic-gradient(' + colors.map(function (c, i) { return c + ' ' + (i * 100 / colors.length) + '% ' + ((i + 1) * 100 / colors.length) + '%'; }).join(',') + ')' : col;
+  if (f.kind === 'point') {
+    var m = new N.Marker({ position: path[0], map: map, zIndex: 200, clickable: true,
+      icon: { content: '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';opacity:.78;border:3px solid rgba(255,255,255,.9);box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>',
+              size: new N.Size(22, 22), anchor: new N.Point(11, 11) } });
+    items.push(m); clickable.push(m);
+  } else if (f.kind === 'line') {
+    items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
+    items.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.72, strokeWeight: 4, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 }));
+    if (colors.length > 1) items.push(new N.Polyline({ map: map, path: path, strokeColor: colors[1], strokeOpacity: 0.9, strokeWeight: 4, strokeStyle: 'shortdash', strokeLineCap: 'butt', clickable: false, zIndex: 103 }));
+    var hit = new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 102 });
+    items.push(hit); clickable.push(hit);
+  } else {
+    items.push(new N.Polygon({ map: map, paths: [path], fillOpacity: 0, strokeColor: '#FFFFFF', strokeOpacity: 0.45, strokeWeight: 5, clickable: false, zIndex: 50 }));
+    var pg = new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.22, strokeColor: colors[1] || col, strokeOpacity: 0.85, strokeWeight: colors.length > 1 ? 3.5 : 2.5, clickable: true, zIndex: 51 });
+    items.push(pg); clickable.push(pg);
+  }
+  var nm = txt(f.title).trim();
+  if (nm) {
+    var pos, cls = 'c';
+    if (f.kind === 'point') { pos = path[0]; cls = 'p'; }
+    else if (f.kind === 'line') { pos = LL(lineMid(f.pts)); }
+    else { pos = LL(centerOf(f)); }
+    var lab = document.createElement('div'); lab.className = 'mlabel ' + cls; lab.textContent = nm;
+    items.push(new N.Marker({ position: pos, map: map, zIndex: 150, clickable: false,
+      icon: { content: lab, size: new N.Size(1, 1), anchor: new N.Point(0, 0) } }));
+  }
+  clickable.forEach(function (o) {
+    N.Event.addListener(o, 'click', function (e) {
+      if (S.mode) { handlePoint(e.coord); return; }
+      openPopup(id, f.kind === 'point' ? LL(f.pts[0]) : e.coord);
+    });
+  });
+  return items;
+}
+function removeItems(items) { items.forEach(function (o) { o.setMap(null); }); }
+function syncMap(force) {
+  if (!S.mapReady) return;
+  if (force) { layers.forEach(function (e) { removeItems(e.items); }); layers.clear(); }
+  var seen = new Set();
+  S.features.forEach(function (f, id) {
+    if (!validFeature(f) || !isVisible(f)) return;
+    seen.add(id);
+    var e = layers.get(id), key = visCats(f).join(',');
+    if (e && e.f === f && e.key === key) return;
+    if (e) { removeItems(e.items); layers.delete(id); if (S.openId === id) closePopup(); }
+    layers.set(id, { items: buildOverlays(id, f), f: f, key: key });
+  });
+  layers.forEach(function (e, id) {
+    if (!seen.has(id)) { removeItems(e.items); layers.delete(id); if (S.openId === id) closePopup(); }
+  });
+}
+function focusRecord(id) {
+  var f = S.features.get(id); if (!f || !validFeature(f) || !S.mapReady) return;
+  if (!isVisible(f)) { S.hiddenCats.delete(catsOf(f)[0]); persist(); syncMap(); renderUI(); }
+  if (isNarrow()) $('#mapwrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  var N = naver.maps;
+  if (f.kind === 'point') { map.setCenter(LL(f.pts[0])); map.setZoom(Math.max(map.getZoom(), 18)); }
+  else {
+    var la = f.pts.map(function (q) { return q[0]; }), ln = f.pts.map(function (q) { return q[1]; });
+    map.fitBounds(new N.LatLngBounds(new N.LatLng(Math.min.apply(null, la), Math.min.apply(null, ln)), new N.LatLng(Math.max.apply(null, la), Math.max.apply(null, ln))), { top: 60, right: 60, bottom: 60, left: 60 });
+  }
+  setTimeout(function () { openPopup(id, LL(centerOf(f))); }, 300);
+}
+
+/* ================= 카테고리 레이어 ================= */
+function setCatVisible(id, on) { if (on) S.hiddenCats.delete(id); else S.hiddenCats.add(id); }
+function afterLayerChange() {
+  persist(); syncMap(); renderUI();
+}
+function soloCat(id) {
+  S.hiddenCats = new Set(CATS.filter(function (c) { return c.id !== id; }).map(function (c) { return c.id; }));
+  afterLayerChange();
+}
+function renderLayerList(box, compact) {
+  var counts = {}; CATS.forEach(function (c) { counts[c.id] = 0; });
+  S.features.forEach(function (f) { if (validFeature(f)) catsOf(f).forEach(function (c) { counts[c]++; }); });
+  box.textContent = '';
+  if (compact) {
+    box.append(h('div', { class: 'btn-row' },
+      h('button', { class: 'btn small', type: 'button', onclick: function () { S.hiddenCats.clear(); afterLayerChange(); } }, '전체 보기'),
+      h('button', { class: 'btn small', type: 'button', onclick: function () { S.hiddenCats = new Set(CATS.map(function (c) { return c.id; })); afterLayerChange(); } }, '모두 끄기')));
+  }
+  CATS.forEach(function (c) {
+    var on = !S.hiddenCats.has(c.id);
+    var tg = h('button', { class: 'ltoggle', type: 'button', style: '--swc:' + c.color, 'aria-pressed': String(on), 'aria-label': c.name + ' ' + (on ? '끄기' : '켜기'),
+      onclick: function () { setCatVisible(c.id, !on); afterLayerChange(); } },
+      h('span', { class: 'lsw' }), h('span', { class: 'lname' }, c.name), h('span', { class: 'lcount' }, counts[c.id] + '건'));
+    var solo = h('button', { class: 'lsolo', type: 'button', onclick: function () { soloCat(c.id); } }, '이것만');
+    box.append(h('div', { class: 'lrow' }, tg, solo));
+  });
+}
+
+/* ================= 그리기 ================= */
+function startDraw(kind) {
+  if (!S.mapReady || !S.canEdit) return;
+  endDraw(true);
+  if (S.hiddenCats.has(S.activeCat)) { S.hiddenCats.delete(S.activeCat); persist(); syncMap(); }
+  S.mode = kind; S.pts = [];
+  closePopup();
+  map.setOptions({ disableDoubleClickZoom: true, disableDoubleTapZoom: true });
+  if (map.setCursor) map.setCursor('crosshair');
+  renderDraft(); renderUI();
+  if (isNarrow()) $('#mapwrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function endDraw(silent) {
+  S.mode = null; S.pts = [];
+  if (map) { map.setOptions({ disableDoubleClickZoom: false, disableDoubleTapZoom: false }); if (map.setCursor) map.setCursor('auto'); }
+  renderDraft(); if (!silent) renderUI();
+}
+function renderDraft() {
+  draftItems.forEach(function (o) { o.setMap(null); }); draftItems = []; rubber = null;
+  if (!S.mode || !S.mapReady) return;
+  var N = naver.maps, col = CAT[S.activeCat].color, pts = S.pts, path = pts.map(LL);
+  if (pts.length >= 2 && S.mode === 'line')
+    draftItems.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeWeight: 4, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
+  if (pts.length >= 2 && S.mode === 'area')
+    draftItems.push(new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.2, strokeColor: col, strokeWeight: 3, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
+  if (S.mode !== 'point' && pts.length) {
+    rubber = new N.Polyline({ map: map, path: [path[path.length - 1], path[path.length - 1]], strokeColor: col, strokeWeight: 2, strokeStyle: 'shortdot', clickable: false, zIndex: 300 });
+    draftItems.push(rubber);
+  }
+  pts.forEach(function (q, i) {
+    var last = i === pts.length - 1, sz = last ? 18 : 12;
+    var m = new N.Marker({ position: path[i], map: map, zIndex: 400, clickable: last && S.mode !== 'point',
+      icon: { content: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:#fff;border:3px solid ' + col + ';box-sizing:border-box"></div>',
+              size: new N.Size(sz, sz), anchor: new N.Point(sz / 2, sz / 2) } });
+    if (last && S.mode !== 'point') N.Event.addListener(m, 'click', tryFinish);
+    draftItems.push(m);
+  });
+}
+function handlePoint(coord) {
+  if (!S.mode) return;
+  var q = [r6(coord.lat()), r6(coord.lng())];
+  if (S.mode === 'point') {
+    S.pts = [q]; renderDraft();
+    openRecordForm({ mode: 'new', kind: 'point', pts: [q] });
+    return;
+  }
+  var last = S.pts[S.pts.length - 1];
+  if (last && last[0] === q[0] && last[1] === q[1]) return;
+  S.pts.push(q); renderDraft(); renderDrawbar();
+}
+function tryFinish() {
+  var need = S.mode === 'area' ? 3 : 2;
+  if (S.pts.length < need) { toast(S.mode === 'area' ? '구역은 꼭짓점이 3개 이상 필요합니다.' : '길은 점이 2개 이상 필요합니다.', 'err'); return; }
+  openRecordForm({ mode: 'new', kind: S.mode, pts: S.pts.map(function (q) { return q.slice(); }) });
+}
+function undoPoint() { S.pts.pop(); renderDraft(); renderDrawbar(); }
+
+/* ================= 사진·로그인 ================= */
+function openPhoto(list, i0) {
+  var i = i0;
+  var img = h('img', { alt: '' });
+  var cnt = h('span', { class: 'hint' });
+  function show() { img.src = photoUrl(list[i]); img.alt = '현장 사진 ' + (i + 1); cnt.textContent = (i + 1) + ' / ' + list.length; }
+  var prev = h('button', { class: 'btn small', type: 'button', disabled: list.length < 2, onclick: function () { i = (i - 1 + list.length) % list.length; show(); } }, '이전');
+  var next = h('button', { class: 'btn small', type: 'button', disabled: list.length < 2, onclick: function () { i = (i + 1) % list.length; show(); } }, '다음');
+  var close = h('button', { class: 'btn small', type: 'button', onclick: closeModal }, '닫기');
+  show();
+  openModal(h('div', { class: 'sheet wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': '사진 보기' },
+    h('div', { class: 'lightbox' }, img, h('div', { class: 'btn-row' }, prev, cnt, next, close))), close);
+}
+function compressImage(file) {
+  return new Promise(function (res, rej) {
+    var url = URL.createObjectURL(file), img = new Image();
+    img.onload = function () {
+      var max = 1280, w = img.naturalWidth, hh = img.naturalHeight, k = Math.min(1, max / Math.max(w, hh));
+      var c = document.createElement('canvas'); c.width = Math.max(1, Math.round(w * k)); c.height = Math.max(1, Math.round(hh * k));
+      var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(img, 0, 0, c.width, c.height);
+      c.toBlob(function (b) { URL.revokeObjectURL(url); if (b) res(b); else rej(new Error('사진 변환 실패')); }, 'image/jpeg', 0.82);
+    };
+    img.onerror = function () { URL.revokeObjectURL(url); rej(new Error('사진을 열 수 없습니다. JPG·PNG 파일을 사용하세요.')); };
+    img.src = url;
+  });
+}
+function openLogin() {
+  var email = h('input', { class: 'field', id: 'lEmail', type: 'email', autocomplete: 'username', placeholder: '이메일' });
+  var pw = h('input', { class: 'field', id: 'lPw', type: 'password', autocomplete: 'current-password', placeholder: '비밀번호' });
+  var err = h('p', { class: 'err', hidden: true });
+  var go = h('button', { class: 'btn primary', type: 'button' }, '로그인');
+  function submit() {
+    if (!email.value.trim() || !pw.value) { err.textContent = '이메일과 비밀번호를 입력하세요.'; err.hidden = false; return; }
+    go.disabled = true; go.textContent = '확인 중…'; err.hidden = true;
+    sbLogin(email.value.trim(), pw.value).then(function (v) {
+      setSession(v); closeModal(); closePopup(); renderUI(); loadServer(); toast('연구자 모드로 로그인했습니다.');
+    }, function (e) {
+      go.disabled = false; go.textContent = '로그인';
+      err.textContent = /invalid/i.test(e.message) ? '이메일 또는 비밀번호가 맞지 않습니다.' : ('로그인하지 못했습니다: ' + e.message); err.hidden = false;
+    });
+  }
+  go.addEventListener('click', submit);
+  pw.addEventListener('keydown', function (e) { if (e.key === 'Enter') submit(); });
+  openModal(h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'loginT' },
+    h('h2', { id: 'loginT' }, '연구자 로그인'),
+    h('p', { class: 'hint' }, '기록 추가·수정·사진 업로드는 로그인한 연구자만 할 수 있습니다. 링크로 들어온 다른 사람은 보기만 가능합니다.'),
+    h('div', null, h('label', { class: 'lbl', for: 'lEmail' }, '이메일'), email),
+    h('div', null, h('label', { class: 'lbl', for: 'lPw' }, '비밀번호'), pw), err,
+    h('div', { class: 'sheet-act' }, h('button', { class: 'btn', type: 'button', onclick: closeModal }, '취소'), go)), email);
+}
+function logout() {
+  setSession(null); if (S.mode) endDraw(true); closePopup(); closeModal(); renderUI(); toast('로그아웃했습니다.');
+}
+function migrateLegacy() {
+  var n = 0;
+  legacy.forEach(function (f, id) { if (!S.features.has(id)) { S.features.set(id, f); pending.set(id, 'put'); n++; } });
+  commit();
+  flush().then(function () {
+    try { localStorage.setItem('changsin-legacy-migrated', '1'); } catch (e) {}
+    legacy.clear(); renderAuth(); toast('이 브라우저의 기록 ' + n + '건을 서버로 올렸습니다.');
+  }, function (e) { toast('일부를 올리지 못했습니다: ' + e.message, 'err'); });
+}
+function renderAuth() {
+  var b = $('#authbox'); if (!b) return; b.textContent = '';
+  if (!SERVER) return;
+  if (session) {
+    b.append(h('span', { class: 'hint' }, '연구자 모드' + (session.email ? ' · ' + session.email : '')),
+      h('button', { class: 'btn small', type: 'button', onclick: logout }, '로그아웃'));
+    if (pending.size) b.append(h('button', { class: 'btn small danger', type: 'button', onclick: function () { flush().then(function () { toast('서버에 저장했습니다.'); }, function () {}); } }, '저장 대기 ' + pending.size + '건 · 다시 시도'));
+    if (legacy.size) b.append(h('button', { class: 'btn small', type: 'button', onclick: migrateLegacy }, '이 브라우저에 있던 기록 ' + legacy.size + '건 서버로 올리기'));
+  } else {
+    b.append(h('span', { class: 'hint' }, '보기 전용'), h('button', { class: 'btn small', type: 'button', onclick: openLogin }, '연구자 로그인'));
+  }
+}
+
+/* ================= 입력 창 ================= */
+function closeModal() { $('#modalRoot').textContent = ''; }
+function openModal(sheet, firstFocus) {
+  var root = $('#modalRoot'); root.textContent = '';
+  var scrim = h('div', { class: 'scrim', onmousedown: function (e) { if (e.target === scrim) closeModal(); } }, sheet);
+  root.append(scrim);
+  if (firstFocus) firstFocus.focus();
+}
+function refreshWhoList() {
+  var names = new Set(); S.features.forEach(function (f) { if (txt(f.who).trim()) names.add(f.who.trim()); });
+  var dl = $('#whoList'); dl.textContent = '';
+  Array.from(names).sort(function (a, b) { return a.localeCompare(b, 'ko'); }).forEach(function (n) { dl.append(h('option', { value: n })); });
+}
+function openRecordForm(o) {
+  var edit = o.mode === 'edit', f = edit ? S.features.get(o.id) : null;
+  if (edit && !f) return;
+  var kind = edit ? f.kind : o.kind, sel = edit ? catsOf(f) : [S.activeCat];
+  var pre = edit ? f : { title: '', who: S.last.who, age: S.last.age, stay: S.last.stay, content: '' };
+
+  var pick = h('div', { class: 'catpick', role: 'group', 'aria-label': '카테고리' });
+  function drawPick() {
+    pick.textContent = '';
+    CATS.forEach(function (c) {
+      var on = sel.indexOf(c.id) >= 0;
+      pick.append(h('button', { class: 'catopt', type: 'button', style: '--swc:' + c.color, 'aria-pressed': String(on),
+        onclick: function () {
+          var i = sel.indexOf(c.id);
+          if (i >= 0) { if (sel.length > 1) sel.splice(i, 1); } else sel.push(c.id);
+          drawPick();
+        } }, h('span', { class: 'lsw' }), h('span', null, c.name), (on && sel.length > 1 && sel[0] === c.id) ? h('span', { class: 'pri' }, '대표') : null));
+    });
+  }
+  drawPick();
+  var title = h('input', { class: 'field', id: 'fTitle', type: 'text', maxlength: '80', value: txt(pre.title), placeholder: KINDS[kind].ph });
+  var who = h('input', { class: 'field', id: 'fWho', type: 'text', maxlength: '40', value: txt(pre.who), list: 'whoList', autocomplete: 'off', placeholder: '이름 또는 가명 (예: P01)' });
+  var age = h('select', { class: 'field', id: 'fAge' }, h('option', { value: '' }, '미기재'),
+    AGES.map(function (a) { return h('option', { value: a, selected: pre.age === a }, a); }));
+  var stay = h('input', { class: 'field', id: 'fStay', type: 'text', maxlength: '40', value: txt(pre.stay), placeholder: '예: 12년, 평생' });
+  var content = h('textarea', { class: 'field', id: 'fContent', maxlength: '4000', placeholder: '이 ' + (kind === 'line' ? '길' : kind === 'area' ? '구역' : '장소') + '에 대해 들려준 이야기를 적어 주세요.' }, txt(pre.content));
+  var err = h('p', { class: 'err', hidden: true });
+
+  /* 사진 (서버 연결 시) */
+  var photos = (SERVER && Array.isArray(pre.photos) ? pre.photos : []).map(function (p) { return { path: p }; });
+  var removedPaths = [];
+  var pgrid = h('div', { class: 'pgrid' });
+  var pcount = h('span', { class: 'hint' });
+  var fileIn = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
+  function drawPhotos() {
+    pgrid.textContent = '';
+    photos.forEach(function (p, i) {
+      pgrid.append(h('div', { class: 'pitem' }, h('img', { src: p.path ? photoUrl(p.path) : p.preview, alt: '사진 ' + (i + 1) }),
+        h('button', { type: 'button', 'aria-label': '사진 ' + (i + 1) + ' 삭제', onclick: function () {
+          if (p.path) removedPaths.push(p.path); else if (p.preview) URL.revokeObjectURL(p.preview);
+          photos.splice(i, 1); drawPhotos(); } }, '×')));
+    });
+    pcount.textContent = photos.length + ' / ' + CONFIG.MAX_PHOTOS + '장';
+    addBtn.disabled = photos.length >= CONFIG.MAX_PHOTOS;
+  }
+  var addBtn = h('button', { class: 'btn small', type: 'button', onclick: function () { fileIn.click(); } }, '사진 추가');
+  fileIn.addEventListener('change', function () {
+    var files = Array.from(fileIn.files || []); fileIn.value = ''; err.hidden = true;
+    var room = CONFIG.MAX_PHOTOS - photos.length;
+    if (files.length > room) { err.textContent = '사진은 최대 ' + CONFIG.MAX_PHOTOS + '장까지입니다. 앞의 ' + room + '장만 추가합니다.'; err.hidden = false; files = files.slice(0, Math.max(0, room)); }
+    files.reduce(function (pr, file) {
+      return pr.then(function () { return compressImage(file).then(function (b) { photos.push({ blob: b, preview: URL.createObjectURL(b) }); drawPhotos(); }); });
+    }, Promise.resolve()).catch(function (e) { err.textContent = e.message; err.hidden = false; });
+  });
+
+  /* 같은 참여자가 이어서 말할 때: 이름을 고르면 지난번 연령대·거주기간을 채운다 */
+  who.addEventListener('change', function () {
+    if (edit) return;
+    var hit = null;
+    S.features.forEach(function (x) { if (txt(x.who).trim() === who.value.trim() && (!hit || (x.createdAt || 0) > (hit.createdAt || 0))) hit = x; });
+    if (hit) { if (!age.value) age.value = hit.age || ''; if (!stay.value) stay.value = hit.stay || ''; }
+  });
+
+  drawPhotos();
+  var save = h('button', { class: 'btn primary', type: 'button' }, '저장');
+  save.addEventListener('click', function () {
+    if (!title.value.trim() && !content.value.trim()) { err.textContent = '장소 이름이나 내용 중 하나는 입력하세요.'; err.hidden = false; title.focus(); return; }
+    var rid = edit ? o.id : newId();
+    save.disabled = true; save.textContent = photos.some(function (p) { return p.blob; }) ? '사진 올리는 중…' : '저장 중…'; err.hidden = true;
+    var keep = [];
+    photos.reduce(function (pr, p) {
+      return pr.then(function () {
+        if (p.path) { keep.push(p.path); return; }
+        var path = rid + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
+        return sbUpload(path, p.blob).then(function () { keep.push(path); });
+      });
+    }, Promise.resolve()).then(function () {
+      var data = { cat: sel[0], cats: sel.slice(), title: title.value.trim(), who: who.value.trim(), age: age.value, stay: stay.value.trim(), content: content.value.trim() };
+      if (SERVER) data.photos = keep;
+      var now = Date.now();
+      if (edit) S.features.set(rid, Object.assign({}, f, data, { updatedAt: now }));
+      else S.features.set(rid, Object.assign({ kind: kind, pts: o.pts, createdAt: now }, data));
+      S.last = { who: data.who, age: data.age, stay: data.stay };
+      S.activeCat = sel[0];
+      if (!isVisible(S.features.get(rid))) S.hiddenCats.delete(sel[0]);
+      closeModal(); if (!edit) endDraw(true);
+      commit();
+      if (SERVER) {
+        queue(rid, 'put').then(function () { toast('기록을 서버에 저장했습니다.'); return sbRemove(removedPaths); },
+          function (e) { toast('서버 저장 실패: ' + e.message, 'err'); });
+      } else toast('기록을 저장했습니다.');
+    }, function (e) {
+      save.disabled = false; save.textContent = '저장';
+      err.textContent = '사진을 올리지 못했습니다: ' + e.message; err.hidden = false;
+    });
+  });
+  var cancel = h('button', { class: 'btn', type: 'button', onclick: function () {
+    closeModal(); if (!edit && kind === 'point') { S.pts = []; renderDraft(); }
+  } }, edit ? '닫기' : '돌아가기');
+
+  var sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheetT' },
+    h('h2', { id: 'sheetT' }, (edit ? '기록 수정 · ' : '기록 입력 · ') + KINDS[kind].long),
+    h('div', null, h('span', { class: 'lbl' }, '카테고리 (여러 개 선택 가능)'), pick,
+      h('p', { class: 'hint' }, '해당하는 카테고리를 모두 누르세요. 먼저 고른 것이 ‘대표’로, 지도에서 기본 색이 됩니다.')),
+    h('div', null, h('label', { class: 'lbl', for: 'fTitle' }, '장소 이름'), title),
+    h('div', { class: 'fgrid' },
+      h('div', { class: 'wide' }, h('label', { class: 'lbl', for: 'fWho' }, '참여자 이름'), who,
+        h('p', { class: 'hint' }, '연구윤리상 실명 대신 가명이나 참여자 코드를 써도 됩니다.')),
+      h('div', null, h('label', { class: 'lbl', for: 'fAge' }, '연령대'), age),
+      h('div', null, h('label', { class: 'lbl', for: 'fStay' }, '거주기간'), stay)),
+    h('div', null, h('label', { class: 'lbl', for: 'fContent' }, '내용'), content),
+    SERVER ? h('div', null, h('span', { class: 'lbl' }, '사진 (선택)'), pgrid,
+      h('div', { class: 'btn-row', style: 'margin-top:8px;align-items:center' }, addBtn, pcount, fileIn),
+      h('p', { class: 'hint' }, '올릴 때 자동으로 줄여서(긴 변 1280px) 저장합니다. 얼굴·간판·번지수가 보이는 사진은 참여자 동의를 확인하세요.')) : null,
+    err,
+    h('div', { class: 'sheet-act' }, cancel, save));
+  openModal(sheet, title);
+}
+function deleteRecord(id) {
+  var old = S.features.get(id), ph = old && Array.isArray(old.photos) ? old.photos.slice() : [];
+  S.features.delete(id); commit();
+  if (SERVER) queue(id, 'del').then(function () { toast('기록을 삭제했습니다.'); return sbRemove(ph); }, function (e) { toast('서버에서 삭제하지 못했습니다: ' + e.message, 'err'); });
+  else toast('기록을 삭제했습니다.');
+}
+
+/* ================= 화면 ================= */
+function renderUI() { renderAuth(); renderSide(); renderTools(); renderDrawbar(); refreshWhoList(); }
+function renderSide() {
+  var kc = { point: 0, line: 0, area: 0 }, total = 0, vis = 0;
+  S.features.forEach(function (f) {
+    if (!validFeature(f)) return;
+    kc[f.kind]++; total++; if (isVisible(f)) vis++;
+  });
+  var sum = '기록 ' + total + '건' + (total ? ' (점 ' + kc.point + ' · 길 ' + kc.line + ' · 구역 ' + kc.area + ')' : '');
+  if (total && vis !== total) sum += ' · 지도에 ' + vis + '건 표시 중';
+  if (total && S.canEdit) sum += S.meta.lastBackup ? ' · 마지막 백업 ' + new Date(S.meta.lastBackup).toLocaleDateString('ko-KR') + (S.meta.changes ? ' 이후 변경 ' + S.meta.changes + '회' : '') : ' · 아직 백업하지 않음';
+  $('#summary').textContent = sum;
+
+  renderLayerList($('#layers'), false);
+  renderLayerList($('#layerpanel'), true);
+
+  var rl = $('#rlist'); rl.textContent = '';
+  var recs = Array.from(S.features.entries()).filter(function (pair) {
+    var f = pair[1]; return validFeature(f) && isVisible(f) && (S.filter === 'all' || f.kind === S.filter);
+  }).sort(function (a, b) { return (b[1].createdAt || 0) - (a[1].createdAt || 0); });
+  if (!recs.length) {
+    rl.append(h('li', { class: 'empty' }, !total && !S.canEdit ? (S.loaded || !SERVER ? '아직 등록된 기록이 없습니다.' : '기록을 불러오는 중입니다…') : !total ? '아직 기록이 없습니다. 지도 왼쪽 위에서 카테고리와 유형(점·길·구역)을 고른 뒤 지도에 그려 보세요.'
+      : (vis === 0 ? '켜져 있는 카테고리가 없습니다. 위에서 카테고리를 켜 주세요.' : '이 유형의 기록이 없습니다.')));
+  }
+  recs.forEach(function (pair) {
+    var id = pair[0], f = pair[1], c = catOf(f), content = txt(f.content).trim().replace(/\s+/g, ' ');
+    var head = txt(f.title).trim() || (content.length > 28 ? content.slice(0, 28) + '…' : content) || '(내용 없음)';
+    rl.append(h('li', null, h('button', { class: 'rrow', type: 'button', style: '--rc:' + (CAT[visCats(f)[0]] || c).color, onclick: function () { focusRecord(id); } },
+      h('span', { class: 'rico' }, icon(f.kind)),
+      h('span', null, h('span', { class: 'rtitle' }, head), h('span', { class: 'rsub' }, catNames(f) + ' · ' + KINDS[f.kind].label + (txt(f.who).trim() ? ' · ' + f.who : ''))))));
+  });
+  document.querySelectorAll('#kindFilter button').forEach(function (b) { b.setAttribute('aria-pressed', String(b.dataset.k === S.filter)); });
+  $('#expGeo').disabled = !total; $('#expCsv').disabled = !total;
+  $('#saveBlock').hidden = !S.canEdit;
+  if (SERVER) $('#saveHint').textContent = '기록과 사진은 서버에 저장되며 링크를 연 모든 사람이 볼 수 있습니다. ‘백업 저장’은 별도 보관용 파일이고, GeoJSON은 QGIS·ArcGIS에서, CSV는 엑셀에서 열 수 있습니다. 내보내기에는 꺼 둔 카테고리도 모두 들어갑니다.';
+}
+function renderTools() {
+  var tools = $('#tools'); tools.hidden = !S.mapReady || !S.canEdit;
+  if (!S.mapReady || !S.canEdit) return;
+  var sel = $('#activeCat'); sel.textContent = '';
+  CATS.forEach(function (c) { sel.append(h('option', { value: c.id, selected: c.id === S.activeCat }, c.name)); });
+  $('#whoDot').style.setProperty('--swc', CAT[S.activeCat].color);
+  document.querySelectorAll('#tools [data-kind]').forEach(function (b) {
+    var k = b.dataset.kind; b.textContent = '';
+    b.append(icon(k), h('span', null, KINDS[k].label));
+    b.setAttribute('aria-pressed', String(S.mode === k));
+    b.title = KINDS[k].long + ' 그리기';
+  });
+}
+function renderDrawbar() {
+  var bar = $('#drawbar');
+  if (!S.mode) { bar.hidden = true; bar.textContent = ''; return; }
+  var c = CAT[S.activeCat], n = S.pts.length, need = S.mode === 'area' ? 3 : 2;
+  var msg = S.mode === 'point' ? '지도에서 위치를 한 번 누르세요'
+    : (S.mode === 'line' ? '점 ' + n + '개 · 길을 따라 눌러 점을 추가' : '꼭짓점 ' + n + '개 · 구역 모서리를 차례로 누르세요');
+  bar.textContent = ''; bar.hidden = false;
+  bar.append(h('span', { class: 'msg' }, h('span', { class: 'dot', style: '--swc:' + c.color }), h('span', null, c.name + ' · ' + msg)));
+  if (S.mode !== 'point') {
+    bar.append(h('button', { class: 'btn small', type: 'button', disabled: n === 0, onclick: undoPoint }, '되돌리기'),
+      h('button', { class: 'btn small primary', type: 'button', disabled: n < need, onclick: tryFinish }, '완료'));
+  }
+  bar.append(h('button', { class: 'btn small', type: 'button', onclick: function () { endDraw(); } }, '취소'));
+}
+
+/* ================= 내보내기·백업 ================= */
+function download(name, mime, text) {
+  var blob = new Blob([text], { type: mime + ';charset=utf-8' });
+  var a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.append(a); a.click(); a.remove();
+  setTimeout(function () { URL.revokeObjectURL(a.href); }, 2000);
+}
+function geometryOf(f) {
+  var c = f.pts.map(function (q) { return [q[1], q[0]]; });
+  if (f.kind === 'point') return { type: 'Point', coordinates: c[0] };
+  if (f.kind === 'line') return { type: 'LineString', coordinates: c };
+  return { type: 'Polygon', coordinates: [c.concat([c[0]])] };
+}
+function wktOf(f) {
+  var c = f.pts.map(function (q) { return q[1] + ' ' + q[0]; });
+  if (f.kind === 'point') return 'POINT(' + c[0] + ')';
+  if (f.kind === 'line') return 'LINESTRING(' + c.join(',') + ')';
+  return 'POLYGON((' + c.concat([c[0]]).join(',') + '))';
+}
+function exportRows() {
+  var rows = [];
+  S.features.forEach(function (f, id) { if (validFeature(f)) rows.push({ id: id, f: f }); });
+  return rows.sort(function (a, b) { return (a.f.createdAt || 0) - (b.f.createdAt || 0); });
+}
+function isoOf(t) { return isFinite(t) && t ? new Date(t).toISOString() : ''; }
+function exportGeoJSON() {
+  var fc = { type: 'FeatureCollection', features: exportRows().map(function (r) {
+    var f = r.f, c = catOf(f);
+    return { type: 'Feature', geometry: geometryOf(f), properties: {
+      기록ID: r.id, 카테고리: catsOf(f).map(function (k) { return CAT[k].name; }).join(', '), 장소이름: txt(f.title), 참여자: txt(f.who), 연령대: txt(f.age), 거주기간: txt(f.stay),
+      내용: txt(f.content), 유형: KINDS[f.kind].label, 색상: catsOf(f).map(function (k) { return CAT[k].color; }).join(', '), 기록일시: isoOf(f.createdAt) } };
+  }) };
+  download('changsin-mapping_' + today() + '.geojson', 'application/geo+json', JSON.stringify(fc, null, 1));
+}
+function csvCell(v) {
+  var s = txt(v);
+  if (/^[=+\-@\t\r]/.test(s)) s = "'" + s;
+  return '"' + s.replace(/"/g, '""') + '"';
+}
+function exportCSV() {
+  var head = ['기록ID', '카테고리', '장소이름', '참여자', '연령대', '거주기간', '내용', '유형', '대표위도', '대표경도', 'WKT', '색상', '기록일시'];
+  var lines = [head.map(csvCell).join(',')];
+  exportRows().forEach(function (r) {
+    var f = r.f, c = catOf(f), ct = centerOf(f);
+    lines.push([r.id, catsOf(f).map(function (k) { return CAT[k].name; }).join(' / '), f.title, f.who, f.age, f.stay, f.content, KINDS[f.kind].label, r6(ct[0]), r6(ct[1]), wktOf(f), catsOf(f).map(function (k) { return CAT[k].color; }).join(' / '), isoOf(f.createdAt)].map(csvCell).join(','));
+  });
+  download('changsin-mapping_' + today() + '.csv', 'text/csv', '﻿' + lines.join('\r\n'));
+}
+function exportBackup() {
+  download('changsin-backup_' + today() + '.json', 'application/json',
+    JSON.stringify({ app: 'changsin-community-map', v: 2, exportedAt: Date.now(), features: mapToObj(S.features) }, null, 1));
+  S.meta.lastBackup = Date.now(); S.meta.changes = 0; persist(); renderUI();
+  toast('백업 파일을 내려받았습니다. 안전한 곳에 보관하세요.');
+}
+function importBackup(file) {
+  if (!S.canEdit) return;
+  var rd = new FileReader();
+  rd.onload = function () {
+    try {
+      var d = JSON.parse(String(rd.result));
+      if (!d || d.app !== 'changsin-community-map' || typeof d.features !== 'object') throw new Error('shape');
+      var nf = 0;
+      Object.keys(d.features).forEach(function (id) {
+        var f = d.features[id];
+        if (!validFeature(f)) return;
+        S.features.set(id, { cat: f.cat, cats: catsOf(f), kind: f.kind, pts: f.pts.map(function (q) { return [Number(q[0]), Number(q[1])]; }),
+          title: txt(f.title).slice(0, 80), who: txt(f.who).slice(0, 40), age: txt(f.age).slice(0, 20), stay: txt(f.stay).slice(0, 40),
+          content: txt(f.content).slice(0, 4000), createdAt: Number(f.createdAt) || Date.now(), updatedAt: f.updatedAt ? Number(f.updatedAt) : undefined,
+          photos: Array.isArray(f.photos) ? f.photos.filter(function (x) { return typeof x === 'string'; }).slice(0, CONFIG.MAX_PHOTOS) : [] });
+        if (SERVER) pending.set(id, 'put');
+        nf++;
+      });
+      commit();
+      if (SERVER) flush().then(function () { toast('기록 ' + nf + '건을 불러와 서버에 저장했습니다.'); }, function (e) { toast('서버 저장 실패: ' + e.message, 'err'); });
+      else toast('기록 ' + nf + '건을 불러왔습니다. 같은 ID의 기록은 덮어썼습니다.');
+    } catch (e) { toast('백업 파일을 읽지 못했습니다. 이 앱에서 저장한 .json 파일인지 확인하세요.', 'err'); }
+  };
+  rd.readAsText(file);
+}
+
+/* ================= 이벤트 ================= */
+document.querySelectorAll('#kindFilter button').forEach(function (b) { b.addEventListener('click', function () { S.filter = b.dataset.k; renderSide(); }); });
+document.querySelectorAll('#tools [data-kind]').forEach(function (b) {
+  b.addEventListener('click', function () { if (S.mode === b.dataset.kind) endDraw(); else startDraw(b.dataset.kind); });
+});
+$('#activeCat').addEventListener('change', function (e) {
+  if (CAT[e.target.value]) { S.activeCat = e.target.value; saveView(); renderUI(); renderDraft(); }
+});
+$('#allOn').addEventListener('click', function () { S.hiddenCats.clear(); afterLayerChange(); });
+$('#allOff').addEventListener('click', function () { S.hiddenCats = new Set(CATS.map(function (c) { return c.id; })); afterLayerChange(); });
+$('#layerBtn').addEventListener('click', function () {
+  S.panelOpen = !S.panelOpen; $('#layerpanel').hidden = !S.panelOpen; $('#layerBtn').setAttribute('aria-expanded', String(S.panelOpen));
+});
+$('#expGeo').addEventListener('click', exportGeoJSON);
+$('#expCsv').addEventListener('click', exportCSV);
+$('#expBackup').addEventListener('click', exportBackup);
+$('#impBackup').addEventListener('click', function () { $('#impFile').click(); });
+$('#impFile').addEventListener('change', function (e) { var f = e.target.files && e.target.files[0]; if (f) importBackup(f); e.target.value = ''; });
+document.addEventListener('keydown', function (e) {
+  if (e.key !== 'Escape') return;
+  if ($('#modalRoot').firstChild) closeModal(); else if (S.mode) endDraw(); else closePopup();
+});
+
+/* ================= 시작 ================= */
+window.addEventListener('error', function (e) {
+  if (e && e.message && !/ResizeObserver/.test(e.message)) setNotice('js', '화면 오류: ' + e.message);
+});
+loadStore();
+readSession();
+renderUI();
+loadNaver();
+if (SERVER) {
+  loadServer();
+  var reloadIfIdle = function () { if (document.hidden || $('#modalRoot').firstChild || S.mode || pending.size) return; loadServer(); };
+  document.addEventListener('visibilitychange', reloadIfIdle);
+  window.addEventListener('focus', reloadIfIdle);
+  setInterval(reloadIfIdle, 90000);
+}
+})();
+</script>
+</body>
+</html>
