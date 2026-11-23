@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v32-ellipse)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v33-minzoom)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -730,7 +730,7 @@ function initMap() {
   ensureMapHeight();
   var N = naver.maps;
   map = new N.Map('map', {
-    center: new N.LatLng(START.lat, START.lng), zoom: START.zoom, minZoom: 6, maxZoom: 21,
+    center: new N.LatLng(START.lat, START.lng), zoom: START.zoom, minZoom: 16, maxZoom: 21,
     zoomControl: true, zoomControlOptions: { position: N.Position.RIGHT_BOTTOM, style: N.ZoomControlStyle.SMALL },
     scaleControl: true, mapDataControl: false, mapTypeControl: false
   });
