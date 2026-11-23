@@ -267,7 +267,7 @@ textarea.field { resize: vertical; min-height: 110px; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v23-gray)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v24-circle)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -319,6 +319,7 @@ textarea.field { resize: vertical; min-height: 110px; }
         <button class="btn small" type="button" data-kind="point" aria-pressed="false"></button>
         <button class="btn small" type="button" data-kind="line" aria-pressed="false"></button>
         <button class="btn small" type="button" data-kind="area" aria-pressed="false"></button>
+        <button class="btn small" type="button" data-kind="circle" aria-pressed="false"></button>
       </div>
     </div>
     <div class="overlay seg basesw" id="baseSw" role="group" aria-label="배경 지도" hidden>
@@ -360,13 +361,13 @@ var START = { lat: 37.57604, lng: 127.01371, zoom: 17 };
 
 /* 카테고리 7종과 색 (지도 위에서 서로 구분되도록 색상환에 고르게 배치) */
 var CATS = [
-  { id: 'attach',     name: '애착장소',   color: '#E0457B' },
-  { id: 'improve',    name: '개선필요',   color: '#F08C00' },
-  { id: 'sewing',     name: '봉제산업',   color: '#1C7ED6' },
-  { id: 'demo',       name: '인구지형',   color: '#2F9E44' },
-  { id: 'heritage',   name: '문화유산',   color: '#7048E8' },
-  { id: 'nickname',   name: '비공식지명', color: '#0CA5B0' },
-  { id: 'researcher', name: '연구자맵핑', color: '#8A5A2B' }
+  { id: 'attach',     name: '애착장소',   color: '#C36F8C' },
+  { id: 'improve',    name: '개선필요',   color: '#CA8C36' },
+  { id: 'sewing',     name: '봉제산업',   color: '#4984B9' },
+  { id: 'demo',       name: '인구지형',   color: '#4D935A' },
+  { id: 'heritage',   name: '문화유산',   color: '#8873CA' },
+  { id: 'nickname',   name: '비공식지명', color: '#33959C' },
+  { id: 'researcher', name: '연구자맵핑', color: '#836446' }
 ];
 var CAT = {}; CATS.forEach(function (c) { CAT[c.id] = c; });
 
@@ -391,7 +392,7 @@ var S = {
   mapReady: false, openId: null, storageOk: true, panelOpen: false
 };
 var layers = new Map();
-var map = null, iw = null, rubber = null, draftItems = [];
+var map = null, iw = null, rubber = null, circlePrev = null, draftItems = [];
 
 /* ================= 도우미 ================= */
 function $(s, el) { return (el || document).querySelector(s); }
@@ -740,6 +741,7 @@ function initMap() {
 
   N.Event.addListener(map, 'click', function (e) { if (S.mode) handlePoint(e.coord); else closePopup(); });
   N.Event.addListener(map, 'mousemove', function (e) {
+    if (circlePrev && S.pts.length) { circlePrev.setPaths([ringPts(S.pts[0], [e.coord.lat(), e.coord.lng()]).pts.map(LL)]); return; }
     if (rubber && S.pts.length) rubber.setPath([LL(S.pts[S.pts.length - 1]), e.coord]);
   });
 
@@ -822,8 +824,8 @@ function buildOverlays(id, f) {
     var hit = new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 102 });
     items.push(hit); clickable.push(hit);
   } else {
-    items.push(new N.Polygon({ map: map, paths: [path], fillOpacity: 0, strokeColor: '#FFFFFF', strokeOpacity: 0.45, strokeWeight: 5, clickable: false, zIndex: 50 }));
-    var pg = new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.22, strokeColor: colors[1] || col, strokeOpacity: 0.85, strokeWeight: colors.length > 1 ? 3.5 : 2.5, clickable: true, zIndex: 51 });
+    var pg = new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: true, zIndex: 51 });
+    if (colors.length > 1) items.push(new N.Polygon({ map: map, paths: [path], fillColor: colors[1], fillOpacity: 0.16, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 52 }));
     items.push(pg); clickable.push(pg);
   }
   var nm = txt(f.title).trim();
@@ -903,9 +905,22 @@ function renderLayerList(box, compact) {
 }
 
 /* ================= 그리기 ================= */
+ICONS.circle = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".28"/></svg>';
+function ringPts(c, e) {
+  var R = 6371000, toR = Math.PI / 180;
+  var dLat = (e[0] - c[0]) * toR, dLng = (e[1] - c[1]) * toR;
+  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(c[0] * toR) * Math.cos(e[0] * toR) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
+  var r = 2 * R * Math.asin(Math.sqrt(a)), out = [];
+  for (var i = 0; i < 48; i++) {
+    var t = i / 48 * 2 * Math.PI;
+    out.push([r6(c[0] + (r * Math.cos(t) / R) / toR), r6(c[1] + (r * Math.sin(t) / (R * Math.cos(c[0] * toR))) / toR)]);
+  }
+  return { pts: out, r: r };
+}
 function startDraw(kind) {
   if (!S.mapReady || !S.canEdit) return;
   endDraw(true);
+  S.circle = (kind === 'circle'); if (S.circle) kind = 'area';
   if (S.hiddenCats.has(S.activeCat)) { S.hiddenCats.delete(S.activeCat); persist(); syncMap(); }
   S.mode = kind; S.pts = [];
   closePopup();
@@ -915,19 +930,22 @@ function startDraw(kind) {
   if (isNarrow()) $('#mapwrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function endDraw(silent) {
-  S.mode = null; S.pts = [];
+  S.mode = null; S.pts = []; S.circle = false;
   if (map) { map.setOptions({ disableDoubleClickZoom: false, disableDoubleTapZoom: false }); if (map.setCursor) map.setCursor('auto'); }
   renderDraft(); if (!silent) renderUI();
 }
 function renderDraft() {
-  draftItems.forEach(function (o) { o.setMap(null); }); draftItems = []; rubber = null;
+  draftItems.forEach(function (o) { o.setMap(null); }); draftItems = []; rubber = null; circlePrev = null;
   if (!S.mode || !S.mapReady) return;
   var N = naver.maps, col = CAT[S.activeCat].color, pts = S.pts, path = pts.map(LL);
   if (pts.length >= 2 && S.mode === 'line')
     draftItems.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeWeight: 4, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
   if (pts.length >= 2 && S.mode === 'area')
-    draftItems.push(new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.2, strokeColor: col, strokeWeight: 3, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
-  if (S.mode !== 'point' && pts.length) {
+    draftItems.push(new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.22, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }));
+  if (S.circle && pts.length) {
+    circlePrev = new N.Polygon({ map: map, paths: [[path[0], path[0], path[0]]], fillColor: col, fillOpacity: 0.22, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 });
+    draftItems.push(circlePrev);
+  } else if (S.mode !== 'point' && pts.length) {
     rubber = new N.Polyline({ map: map, path: [path[path.length - 1], path[path.length - 1]], strokeColor: col, strokeWeight: 2, strokeStyle: 'shortdot', clickable: false, zIndex: 300 });
     draftItems.push(rubber);
   }
@@ -946,6 +964,13 @@ function handlePoint(coord) {
   if (S.mode === 'point') {
     S.pts = [q]; renderDraft();
     openRecordForm({ mode: 'new', kind: 'point', pts: [q] });
+    return;
+  }
+  if (S.circle) {
+    if (!S.pts.length) { S.pts = [q]; renderDraft(); renderDrawbar(); return; }
+    var rg = ringPts(S.pts[0], q);
+    if (rg.r < 5) { toast('반지름이 너무 작아요. 중심에서 조금 더 떨어진 곳을 누르세요.', 'err'); return; }
+    openRecordForm({ mode: 'new', kind: 'area', pts: rg.pts });
     return;
   }
   var last = S.pts[S.pts.length - 1];
@@ -1216,8 +1241,14 @@ function renderTools() {
   $('#whoDot').style.setProperty('--swc', CAT[S.activeCat].color);
   document.querySelectorAll('#tools [data-kind]').forEach(function (b) {
     var k = b.dataset.kind; b.textContent = '';
+    if (k === 'circle') {
+      b.append(icon('circle'), h('span', null, '원형'));
+      b.setAttribute('aria-pressed', String(S.mode === 'area' && !!S.circle));
+      b.title = '원형 구역 그리기 (중심을 누르고, 반지름만큼 떨어진 곳을 누르세요)';
+      return;
+    }
     b.append(icon(k), h('span', null, KINDS[k].label));
-    b.setAttribute('aria-pressed', String(S.mode === k));
+    b.setAttribute('aria-pressed', String(S.mode === k && !S.circle));
     b.title = KINDS[k].long + ' 그리기';
   });
 }
@@ -1227,9 +1258,12 @@ function renderDrawbar() {
   var c = CAT[S.activeCat], n = S.pts.length, need = S.mode === 'area' ? 3 : 2;
   var msg = S.mode === 'point' ? '지도에서 위치를 한 번 누르세요'
     : (S.mode === 'line' ? '점 ' + n + '개 · 길을 따라 눌러 점을 추가' : '꼭짓점 ' + n + '개 · 구역 모서리를 차례로 누르세요');
+  if (S.circle) msg = n ? '반지름 위치를 누르세요 (커서를 움직이면 크기가 보여요)' : '원의 중심을 누르세요';
   bar.textContent = ''; bar.hidden = false;
   bar.append(h('span', { class: 'msg' }, h('span', { class: 'dot', style: '--swc:' + c.color }), h('span', null, c.name + ' · ' + msg)));
-  if (S.mode !== 'point') {
+  if (S.circle) {
+    bar.append(h('button', { class: 'btn small', type: 'button', disabled: n === 0, onclick: undoPoint }, '중심 다시'));
+  } else if (S.mode !== 'point') {
     bar.append(h('button', { class: 'btn small', type: 'button', disabled: n === 0, onclick: undoPoint }, '되돌리기'),
       h('button', { class: 'btn small primary', type: 'button', disabled: n < need, onclick: tryFinish }, '완료'));
   }
