@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v26-right)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v27-line)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -914,7 +914,7 @@ function lineMid(pts) {
 }
 function buildOverlays(id, f) {
   var N = naver.maps, colors = colorsOf(f), col = colors[0], items = [], path = f.pts.map(LL), clickable = [];
-  var dash = visCats(f).indexOf('nickname') >= 0;
+  var dash = f.kind === 'line' && visCats(f).indexOf('nickname') >= 0;
   var bg = colors.length > 1 ? 'conic-gradient(' + colors.map(function (c, i) { return c + ' ' + (i * 100 / colors.length) + '% ' + ((i + 1) * 100 / colors.length) + '%'; }).join(',') + ')' : col;
   if (f.kind === 'point') {
     var m = new N.Marker({ position: path[0], map: map, zIndex: 200, clickable: true,
@@ -1037,7 +1037,7 @@ function startDraw(kind) {
   if (isNarrow()) $('#mapwrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function endDraw(silent) {
-  S.mode = null; S.pts = []; S.circle = false; dragC = null;
+  S.mode = null; S.pts = []; S.circle = false; S.finishing = false; dragC = null;
   if (map) { map.setOptions({ disableDoubleClickZoom: false, disableDoubleTapZoom: false, draggable: true, pinchZoom: true }); if (map.setCursor) map.setCursor('auto'); }
   renderDraft(); if (!silent) renderUI();
 }
@@ -1046,16 +1046,16 @@ function renderDraft() {
   if (!S.mode || !S.mapReady) return;
   var N = naver.maps, col = CAT[S.activeCat].color, pts = S.pts, path = pts.map(LL);
   if (pts.length >= 2 && S.mode === 'line')
-    draftItems.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeWeight: 4, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
+    draftItems.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeWeight: 4, strokeStyle: S.finishing ? 'solid' : 'shortdash', strokeOpacity: S.finishing ? 0.8 : 1, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 300 }));
   if (pts.length >= 2 && S.mode === 'area')
     draftItems.push(new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.22, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }));
   if (S.circle) {
     /* 원형은 드래그 중에만 미리보기 */
-  } else if (S.mode !== 'point' && pts.length) {
+  } else if (S.mode !== 'point' && pts.length && !S.finishing) {
     rubber = new N.Polyline({ map: map, path: [path[path.length - 1], path[path.length - 1]], strokeColor: col, strokeWeight: 2, strokeStyle: 'shortdot', clickable: false, zIndex: 300 });
     draftItems.push(rubber);
   }
-  if (!S.circle) pts.forEach(function (q, i) {
+  if (!S.circle && !S.finishing) pts.forEach(function (q, i) {
     var last = i === pts.length - 1, sz = last ? 18 : 12;
     var m = new N.Marker({ position: path[i], map: map, zIndex: 400, clickable: last && S.mode !== 'point',
       icon: { content: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:#fff;border:3px solid ' + col + ';box-sizing:border-box"></div>',
@@ -1075,14 +1075,15 @@ function handlePoint(coord) {
   if (S.circle) return;
   var last = S.pts[S.pts.length - 1];
   if (last && last[0] === q[0] && last[1] === q[1]) return;
-  S.pts.push(q); renderDraft(); renderDrawbar();
+  S.finishing = false; S.pts.push(q); renderDraft(); renderDrawbar();
 }
 function tryFinish() {
   var need = S.mode === 'area' ? 3 : 2;
   if (S.pts.length < need) { toast(S.mode === 'area' ? '구역은 꼭짓점이 3개 이상 필요합니다.' : '길은 점이 2개 이상 필요합니다.', 'err'); return; }
+  S.finishing = true; renderDraft();
   openRecordForm({ mode: 'new', kind: S.mode, pts: S.pts.map(function (q) { return q.slice(); }) });
 }
-function undoPoint() { S.pts.pop(); renderDraft(); renderDrawbar(); }
+function undoPoint() { S.finishing = false; S.pts.pop(); renderDraft(); renderDrawbar(); }
 
 /* ================= 사진·로그인 ================= */
 function openPhoto(list, i0) {
