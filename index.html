@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v31-label2)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v32-ellipse)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -832,7 +832,7 @@ function measureOf(f) {
 }
 function detailFor(id) {
   var f = S.features.get(id); if (!f) return h('div');
-  var vc = visCats(f), c = CAT[vc[0] || catsOf(f)[0]] || catOf(f), fg = onColor(c.color), m = measureOf(f);
+  var vc = visCats(f), c = { color: mixOf(f), name: '' }, fg = onColor(c.color), m = measureOf(f);
   function chip(k, v) { var e = txt(v).trim(); return h('div', { class: 'dchip' }, h('span', null, k), h('b', { class: e ? '' : 'none' }, e || '미기재')); }
   var story = txt(f.content).trim();
   var hero = h('div', { class: 'dhero', style: '--c:' + c.color + ';--fg:' + fg },
@@ -870,7 +870,7 @@ function detailFor(id) {
 function popupFor(id) {
   var f = S.features.get(id);
   if (!f) return h('div');
-  var vc = visCats(f), c = CAT[vc[0] || catsOf(f)[0]] || catOf(f), fg = onColor(c.color);
+  var c = { color: mixOf(f) }, fg = onColor(c.color);
   function kv(k, v) { var e = txt(v).trim(); return [h('dt', null, k), h('dd', { class: e ? '' : 'none' }, e || '미기재')]; }
   var body = h('div', { class: 'pop-body' },
     h('div', { class: 'pop-title' }, txt(f.title).trim() || '(장소 이름 없음)'),
@@ -914,28 +914,22 @@ function lineMid(pts) {
 }
 function buildOverlays(id, f) {
   var N = naver.maps, ids = visCats(f); if (!ids.length) ids = catsOf(f);
-  var items = [], path = f.pts.map(LL), clickable = [];
-  /* 여러 카테고리는 대표색 없이 반투명 색을 겹쳐 쌓아서 섞인 색으로 보인다 */
+  var items = [], path = f.pts.map(LL), clickable = [], mix = mixHex(ids);
+  /* 여러 카테고리는 대표색 없이, 선택된 모든 색을 섞은 색으로 표시 */
   if (f.kind === 'point') {
-    var layersHtml = ids.map(function (k) { return '<div style="position:absolute;inset:0;border-radius:50%;background:' + CAT[k].color + ';opacity:' + (ids.length > 1 ? 0.6 : 0.78) + '"></div>'; }).join('');
     var m = new N.Marker({ position: path[0], map: map, zIndex: 200, clickable: true,
-      icon: { content: '<div style="position:relative;width:22px;height:22px;border-radius:50%;box-sizing:border-box;border:3px solid rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(0,0,0,.28)"><div style="position:absolute;inset:0;border-radius:50%;overflow:hidden">' + layersHtml + '</div></div>',
+      icon: { content: '<div style="width:22px;height:22px;border-radius:50%;background:' + mix + ';opacity:.8;border:3px solid rgba(255,255,255,.95);box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>',
               size: new N.Size(22, 22), anchor: new N.Point(11, 11) } });
     items.push(m); clickable.push(m);
   } else if (f.kind === 'line') {
-    var anyDash = ids.indexOf('nickname') >= 0;
-    if (!anyDash) items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
-    ids.forEach(function (k, i) {
-      var d = k === 'nickname';
-      items.push(new N.Polyline({ map: map, path: path, strokeColor: CAT[k].color, strokeOpacity: ids.length > 1 ? 0.62 : (d ? 0.9 : 0.72), strokeWeight: 4, strokeStyle: d ? 'shortdash' : 'solid', strokeLineCap: d ? 'butt' : 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 + i }));
-    });
-    var hit = new N.Polyline({ map: map, path: path, strokeColor: CAT[ids[0]].color, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 110 });
+    var d = ids.indexOf('nickname') >= 0;
+    if (!d) items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
+    items.push(new N.Polyline({ map: map, path: path, strokeColor: mix, strokeOpacity: d ? 0.9 : 0.75, strokeWeight: 4, strokeStyle: d ? 'shortdash' : 'solid', strokeLineCap: d ? 'butt' : 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 }));
+    var hit = new N.Polyline({ map: map, path: path, strokeColor: mix, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 110 });
     items.push(hit); clickable.push(hit);
   } else {
-    ids.forEach(function (k, i) {
-      var pg = new N.Polygon({ map: map, paths: [path], fillColor: CAT[k].color, fillOpacity: ids.length > 1 ? 0.22 : 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: i === 0, zIndex: 51 + i });
-      items.push(pg); if (i === 0) clickable.push(pg);
-    });
+    var pg = new N.Polygon({ map: map, paths: [path], fillColor: mix, fillOpacity: 0.3, strokeOpacity: 0, strokeWeight: 0, clickable: true, zIndex: 51 });
+    items.push(pg); clickable.push(pg);
   }
   var nm = txt(f.title).trim();
   if (nm && ids.indexOf('nickname') >= 0) {   /* 이름표는 비공식지명 기록에만 */
@@ -1017,21 +1011,28 @@ function renderLayerList(box, compact) {
 
 /* ================= 그리기 ================= */
 ICONS.circle = '<svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><circle cx="8" cy="8" r="5.5" fill="currentColor" fill-opacity=".28"/></svg>';
-function ringPts(c, e) {
-  var R = 6371000, toR = Math.PI / 180;
-  var dLat = (e[0] - c[0]) * toR, dLng = (e[1] - c[1]) * toR;
-  var a = Math.sin(dLat / 2) * Math.sin(dLat / 2) + Math.cos(c[0] * toR) * Math.cos(e[0] * toR) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
-  var r = 2 * R * Math.asin(Math.sqrt(a)), out = [];
+/* 드래그한 두 점을 모서리로 하는 사각형에 꼭 맞는 타원 */
+function ellipsePts(p0, p1) {
+  var cLat = (p0[0] + p1[0]) / 2, cLng = (p0[1] + p1[1]) / 2, a = Math.abs(p1[0] - p0[0]) / 2, b = Math.abs(p1[1] - p0[1]) / 2, out = [];
   for (var i = 0; i < 48; i++) {
     var t = i / 48 * 2 * Math.PI;
-    out.push([r6(c[0] + (r * Math.cos(t) / R) / toR), r6(c[1] + (r * Math.sin(t) / (R * Math.cos(c[0] * toR))) / toR)]);
+    out.push([r6(cLat + a * Math.cos(t)), r6(cLng + b * Math.sin(t))]);
   }
-  return { pts: out, r: r };
+  return { pts: out, hm: a * 111320, wm: b * 111320 * Math.cos(cLat * Math.PI / 180) };
 }
+/* 여러 카테고리 색을 섞은 색 (RGB 평균) */
+function mixHex(ids) {
+  var r = 0, g = 0, b = 0;
+  ids.forEach(function (k) { var h6 = CAT[k].color; r += parseInt(h6.slice(1, 3), 16); g += parseInt(h6.slice(3, 5), 16); b += parseInt(h6.slice(5, 7), 16); });
+  var n = ids.length || 1;
+  function x(v) { return ('0' + Math.round(v / n).toString(16)).slice(-2); }
+  return '#' + x(r) + x(g) + x(b);
+}
+function mixOf(f) { var v = visCats(f); return mixHex(v.length ? v : catsOf(f)); }
 function startDraw(kind) {
   if (!S.mapReady || !S.canEdit) return;
   endDraw(true);
-  S.circle = (kind === 'area');
+  S.circle = (kind === 'area' && S.activeCat === 'demo');
   if (S.circle) map.setOptions({ draggable: false, pinchZoom: false });
   if (S.hiddenCats.has(S.activeCat)) { S.hiddenCats.delete(S.activeCat); persist(); syncMap(); }
   S.mode = kind; S.pts = [];
@@ -1281,7 +1282,7 @@ function openRecordForm(o) {
   var sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheetT' },
     h('h2', { id: 'sheetT' }, (edit ? '기록 수정 · ' : '기록 입력 · ') + KINDS[kind].long),
     h('div', null, h('span', { class: 'lbl' }, '카테고리 (여러 개 선택 가능)'), pick,
-      h('p', { class: 'hint' }, '해당하는 카테고리를 모두 누르세요. 먼저 고른 것이 ‘대표’로, 지도에서 기본 색이 됩니다.')),
+      h('p', { class: 'hint' }, '해당하는 카테고리를 모두 누르세요. 여러 개를 고르면 지도에서 색이 섞여 보입니다.')),
     h('div', null, h('label', { class: 'lbl', for: 'fTitle' }, '장소 이름'), title),
     h('div', { class: 'fgrid' },
       h('div', { class: 'wide' }, h('label', { class: 'lbl', for: 'fWho' }, '참여자 이름'), who,
@@ -1330,7 +1331,7 @@ function renderSide() {
   recs.forEach(function (pair) {
     var id = pair[0], f = pair[1], c = catOf(f), content = txt(f.content).trim().replace(/\s+/g, ' ');
     var head = txt(f.title).trim() || (content.length > 28 ? content.slice(0, 28) + '…' : content) || '(내용 없음)';
-    rl.append(h('li', null, h('button', { class: 'rrow', type: 'button', style: '--rc:' + (CAT[visCats(f)[0]] || c).color, onclick: function () { focusRecord(id); } },
+    rl.append(h('li', null, h('button', { class: 'rrow', type: 'button', style: '--rc:' + mixOf(f), onclick: function () { focusRecord(id); } },
       h('span', { class: 'rico' }, icon(f.kind)),
       h('span', null, h('span', { class: 'rtitle' }, head), h('span', { class: 'rsub' }, catNames(f) + ' · ' + KINDS[f.kind].label + (txt(f.who).trim() ? ' · ' + f.who : ''))))));
   });
@@ -1349,7 +1350,7 @@ function renderTools() {
     var k = b.dataset.kind; b.textContent = '';
     b.append(icon(k), h('span', null, KINDS[k].label));
     b.setAttribute('aria-pressed', String(S.mode === k));
-    b.title = k === 'area' ? '구역 그리기 (지도 위에서 드래그해 원으로 표시)' : KINDS[k].long + ' 그리기';
+    b.title = k === 'area' ? '구역 그리기 (인구지형은 드래그로 타원, 나머지는 꼭짓점을 눌러 다각형)' : KINDS[k].long + ' 그리기';
   });
 }
 function renderDrawbar() {
@@ -1358,7 +1359,7 @@ function renderDrawbar() {
   var c = CAT[S.activeCat], n = S.pts.length, need = S.mode === 'area' ? 3 : 2;
   var msg = S.mode === 'point' ? '지도에서 위치를 한 번 누르세요'
     : (S.mode === 'line' ? '점 ' + n + '개 · 길을 따라 눌러 점을 추가' : '꼭짓점 ' + n + '개 · 구역 모서리를 차례로 누르세요');
-  if (S.circle) msg = '지도 위에서 누른 채 드래그하면 원형 구역이 그려져요';
+  if (S.circle) msg = '지도 위에서 누른 채 대각선으로 드래그하면 타원 구역이 그려져요';
   bar.textContent = ''; bar.hidden = false;
   bar.append(h('span', { class: 'msg' }, h('span', { class: 'dot', style: '--swc:' + c.color }), h('span', null, c.name + ' · ' + msg)));
   if (S.circle) {
@@ -1451,36 +1452,51 @@ function importBackup(file) {
 }
 
 
-/* 구역 = 드래그로 그리는 원 */
+/* 인구지형 구역 = 드래그로 그리는 타원 */
+function mapCoordAt(e) {
+  var pr = map.getProjection(), c;
+  if (pr.fromPageXYToCoord) c = pr.fromPageXYToCoord(new naver.maps.Point(e.pageX, e.pageY));
+  else { var r = document.getElementById('map').getBoundingClientRect(); c = pr.fromOffsetToCoord(new naver.maps.Point(e.clientX - r.left, e.clientY - r.top)); }
+  return [r6(c.lat()), r6(c.lng())];
+}
 function circleStart(e) {
-  if (!S.circle || !S.mapReady || (e.button != null && e.button > 0)) return;
+  if (!S.circle || !S.mapReady || dragC || (e.button != null && e.button > 0)) return;
   if (e.target.closest && e.target.closest('.overlay, .pop, button, select, input')) return;
-  var c = map.getProjection().fromPageXYToCoord(new naver.maps.Point(e.pageX, e.pageY));
-  var ctr = [r6(c.lat()), r6(c.lng())], col = CAT[S.activeCat].color;
-  e.preventDefault(); e.stopPropagation();
-  dragC = { ctr: ctr, poly: new naver.maps.Polygon({ map: map, paths: [[LL(ctr), LL(ctr), LL(ctr)]], fillColor: col, fillOpacity: 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }), r: 0, pts: null };
-  try { $('#map').setPointerCapture(e.pointerId); } catch (x) {}
+  try {
+    var p0 = mapCoordAt(e), col = CAT[S.activeCat].color;
+    e.preventDefault(); e.stopPropagation();
+    dragC = { p0: p0, poly: new naver.maps.Polygon({ map: map, paths: [[LL(p0), LL(p0), LL(p0)]], fillColor: col, fillOpacity: 0.28, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }), pts: null, ok: false };
+    window.addEventListener('pointermove', circleMove, true);
+    window.addEventListener('pointerup', circleEnd, true);
+    window.addEventListener('pointercancel', circleCancel, true);
+  } catch (x) { toast('구역 그리기 오류: ' + x.message, 'err'); }
 }
 function circleMove(e) {
   if (!dragC) return;
-  var c = map.getProjection().fromPageXYToCoord(new naver.maps.Point(e.pageX, e.pageY));
-  var rg = ringPts(dragC.ctr, [c.lat(), c.lng()]);
-  dragC.r = rg.r; dragC.pts = rg.pts; dragC.poly.setPaths([rg.pts.map(LL)]);
+  try {
+    var el = ellipsePts(dragC.p0, mapCoordAt(e));
+    dragC.pts = el.pts; dragC.ok = el.hm >= 4 && el.wm >= 4;
+    dragC.poly.setPaths([el.pts.map(LL)]);
+  } catch (x) {}
   e.preventDefault();
 }
+function circleDone() {
+  window.removeEventListener('pointermove', circleMove, true);
+  window.removeEventListener('pointerup', circleEnd, true);
+  window.removeEventListener('pointercancel', circleCancel, true);
+}
+function circleCancel() { if (dragC) { dragC.poly.setMap(null); dragC = null; } circleDone(); }
 function circleEnd(e) {
   if (!dragC) return;
-  var d = dragC; dragC = null; d.poly.setMap(null);
-  try { $('#map').releasePointerCapture(e.pointerId); } catch (x) {}
-  if (d.r < 8 || !d.pts) { toast('누른 채로 끌어서 원을 그려 보세요.', 'err'); return; }
-  openRecordForm({ mode: 'new', kind: 'area', pts: d.pts });
+  try { circleMove(e); } catch (x) {}
+  var d = dragC; dragC = null; circleDone(); d.poly.setMap(null);
+  if (!d.ok || !d.pts) { toast('누른 채 대각선으로 끌어서 타원을 그려 보세요.', 'err'); return; }
+  try { openRecordForm({ mode: 'new', kind: 'area', pts: d.pts }); }
+  catch (x) { toast('입력창을 열지 못했습니다: ' + x.message, 'err'); }
 }
 (function () {
   var el = document.getElementById('map');
   el.addEventListener('pointerdown', circleStart, true);
-  el.addEventListener('pointermove', circleMove, true);
-  el.addEventListener('pointerup', circleEnd, true);
-  el.addEventListener('pointercancel', function () { if (dragC) { dragC.poly.setMap(null); dragC = null; } }, true);
   el.style.touchAction = 'none';
 })();
 
@@ -1490,7 +1506,7 @@ document.querySelectorAll('#tools [data-kind]').forEach(function (b) {
   b.addEventListener('click', function () { if (S.mode === b.dataset.kind) endDraw(); else startDraw(b.dataset.kind); });
 });
 $('#activeCat').addEventListener('change', function (e) {
-  if (CAT[e.target.value]) { S.activeCat = e.target.value; saveView(); renderUI(); renderDraft(); }
+  if (CAT[e.target.value]) { S.activeCat = e.target.value; saveView(); if (S.mode === 'area') { startDraw('area'); return; } renderUI(); renderDraft(); }
 });
 $('#allOn').addEventListener('click', function () { S.hiddenCats.clear(); afterLayerChange(); });
 $('#zIn').addEventListener('click', function () { if (map) map.setZoom(map.getZoom() + 1, true); });
