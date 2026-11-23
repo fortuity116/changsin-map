@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v35-lock)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v36-bounds2)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -402,7 +402,7 @@ var CONFIG = {
 };
 
 /* 처음 열 때 보여 줄 위치 (종로구 창신동 부근). 지도는 어디로든 자유롭게 옮길 수 있습니다. */
-var START = { lat: 37.57604, lng: 127.01371, zoom: 17 };
+var START = { lat: 37.5762, lng: 127.0118, zoom: 16 };
 
 /* 카테고리 7종과 색 (지도 위에서 서로 구분되도록 색상환에 고르게 배치) */
 var CATS = [
@@ -730,7 +730,8 @@ function initMap() {
   ensureMapHeight();
   var N = naver.maps;
   map = new N.Map('map', {
-    center: new N.LatLng(START.lat, START.lng), zoom: START.zoom, minZoom: 16, maxZoom: 21,
+    center: new N.LatLng(START.lat, START.lng), zoom: START.zoom, minZoom: 15, maxZoom: 19,
+    maxBounds: new N.LatLngBounds(new N.LatLng(37.5708, 127.0065), new N.LatLng(37.5820, 127.0172)),
     zoomControl: true, zoomControlOptions: { position: N.Position.RIGHT_BOTTOM, style: N.ZoomControlStyle.SMALL },
     scaleControl: true, mapDataControl: false, mapTypeControl: false
   });
@@ -759,28 +760,7 @@ function initMap() {
     try { N.Event.trigger(map, 'resize'); } catch (e) {}
   }
   fitSize();
-  if (window.ResizeObserver)
-  /* 왼쪽 패널이 지도를 덮고 있으므로, 창신동이 '보이는 지도 영역'의 한가운데 오도록 시작 위치를 옆으로 옮긴다 */
-  try {
-    if (!isNarrow()) {
-      var pr = map.getProjection(), pt = pr.fromCoordToOffset(map.getCenter());
-      pt.x -= 190; map.setCenter(pr.fromOffsetToCoord(pt));
-    }
-  } catch (e) {} new ResizeObserver(fitSize).observe(mapBox);
-  /* 시작 위치에서 16단계로 축소했을 때 보이는 화면 범위 안에서만 이동할 수 있게 잠근다 */
-  var C0 = null;
-  function lockBounds() {
-    try {
-      var pr = map.getProjection(), w = mapBox.clientWidth, hh = mapBox.clientHeight;
-      if (w < 50 || hh < 50) return;
-      if (!C0) C0 = map.getCenter();
-      var k = Math.pow(2, map.getZoom() - 16) * 1.003, c = pr.fromCoordToOffset(C0), hw = w / 2 * k, hy = hh / 2 * k;
-      var sw = pr.fromOffsetToCoord(new N.Point(c.x - hw, c.y + hy)), ne = pr.fromOffsetToCoord(new N.Point(c.x + hw, c.y - hy));
-      map.setOptions('maxBounds', new N.LatLngBounds(sw, ne));
-    } catch (e) {}
-  }
-  lockBounds();
-  window.addEventListener('resize', function () { setTimeout(lockBounds, 120); });
+  if (window.ResizeObserver) new ResizeObserver(fitSize).observe(mapBox);
   window.addEventListener('resize', fitSize);
   window.addEventListener('load', fitSize);
   [200, 800, 2000, 4000].forEach(function (t) { setTimeout(fitSize, t); });
