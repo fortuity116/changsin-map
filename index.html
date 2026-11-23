@@ -265,7 +265,7 @@ textarea.field { resize: vertical; min-height: 110px; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v20-multicat)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v21-start)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -710,7 +710,14 @@ function initMap() {
     try { N.Event.trigger(map, 'resize'); } catch (e) {}
   }
   fitSize();
-  if (window.ResizeObserver) new ResizeObserver(fitSize).observe(mapBox);
+  if (window.ResizeObserver)
+  /* 왼쪽 패널이 지도를 덮고 있으므로, 창신동이 '보이는 지도 영역'의 한가운데 오도록 시작 위치를 옆으로 옮긴다 */
+  try {
+    if (!isNarrow()) {
+      var pr = map.getProjection(), pt = pr.fromCoordToOffset(map.getCenter());
+      pt.x -= 190; map.setCenter(pr.fromOffsetToCoord(pt));
+    }
+  } catch (e) {} new ResizeObserver(fitSize).observe(mapBox);
   window.addEventListener('resize', fitSize);
   window.addEventListener('load', fitSize);
   [200, 800, 2000, 4000].forEach(function (t) { setTimeout(fitSize, t); });
