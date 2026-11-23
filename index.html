@@ -251,8 +251,9 @@ textarea.field { resize: vertical; min-height: 110px; }
 .mlabel.p { transform: translate(15px, -50%); }
 .mlabel.c { transform: translate(-50%, -50%); text-align: center; }
 #map.nolabel .mlabel { display: none; }
-/* 배경 지도 타일만 흑백 (기록 오버레이·마커는 그대로 컬러) */
-#map img[src*="pstatic.net"] { filter: grayscale(1) contrast(.95) brightness(1.03); }
+/* 배경 지도 타일만 채도 낮춤 (기록이 모두 꺼지면 원래 색) */
+#map img[src*="pstatic.net"] { filter: saturate(.4) brightness(1.02); transition: filter .25s; }
+#map.plain img[src*="pstatic.net"] { filter: none; }
 
 /* 여러 카테고리 */
 .cchips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -267,7 +268,7 @@ textarea.field { resize: vertical; min-height: 110px; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v24-circle)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v25-drag)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -319,7 +320,6 @@ textarea.field { resize: vertical; min-height: 110px; }
         <button class="btn small" type="button" data-kind="point" aria-pressed="false"></button>
         <button class="btn small" type="button" data-kind="line" aria-pressed="false"></button>
         <button class="btn small" type="button" data-kind="area" aria-pressed="false"></button>
-        <button class="btn small" type="button" data-kind="circle" aria-pressed="false"></button>
       </div>
     </div>
     <div class="overlay seg basesw" id="baseSw" role="group" aria-label="배경 지도" hidden>
@@ -392,6 +392,7 @@ var S = {
   mapReady: false, openId: null, storageOk: true, panelOpen: false
 };
 var layers = new Map();
+var dragC = null;
 var map = null, iw = null, rubber = null, circlePrev = null, draftItems = [];
 
 /* ================= 도우미 ================= */
@@ -741,7 +742,6 @@ function initMap() {
 
   N.Event.addListener(map, 'click', function (e) { if (S.mode) handlePoint(e.coord); else closePopup(); });
   N.Event.addListener(map, 'mousemove', function (e) {
-    if (circlePrev && S.pts.length) { circlePrev.setPaths([ringPts(S.pts[0], [e.coord.lat(), e.coord.lng()]).pts.map(LL)]); return; }
     if (rubber && S.pts.length) rubber.setPath([LL(S.pts[S.pts.length - 1]), e.coord]);
   });
 
@@ -811,21 +811,23 @@ function lineMid(pts) {
 }
 function buildOverlays(id, f) {
   var N = naver.maps, colors = colorsOf(f), col = colors[0], items = [], path = f.pts.map(LL), clickable = [];
+  var dash = visCats(f).indexOf('nickname') >= 0;
   var bg = colors.length > 1 ? 'conic-gradient(' + colors.map(function (c, i) { return c + ' ' + (i * 100 / colors.length) + '% ' + ((i + 1) * 100 / colors.length) + '%'; }).join(',') + ')' : col;
   if (f.kind === 'point') {
     var m = new N.Marker({ position: path[0], map: map, zIndex: 200, clickable: true,
-      icon: { content: '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';opacity:.78;border:3px solid rgba(255,255,255,.9);box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>',
+      icon: { content: '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';opacity:.78;border:3px ' + (dash ? 'dashed' : 'solid') + ' rgba(255,255,255,.95);box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>',
               size: new N.Size(22, 22), anchor: new N.Point(11, 11) } });
     items.push(m); clickable.push(m);
   } else if (f.kind === 'line') {
-    items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
-    items.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.72, strokeWeight: 4, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 }));
+    if (!dash) items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
+    items.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: dash ? 0.9 : 0.72, strokeWeight: 4, strokeStyle: dash ? 'shortdash' : 'solid', strokeLineCap: dash ? 'butt' : 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 }));
     if (colors.length > 1) items.push(new N.Polyline({ map: map, path: path, strokeColor: colors[1], strokeOpacity: 0.9, strokeWeight: 4, strokeStyle: 'shortdash', strokeLineCap: 'butt', clickable: false, zIndex: 103 }));
     var hit = new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 102 });
     items.push(hit); clickable.push(hit);
   } else {
     var pg = new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: true, zIndex: 51 });
     if (colors.length > 1) items.push(new N.Polygon({ map: map, paths: [path], fillColor: colors[1], fillOpacity: 0.16, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 52 }));
+    if (dash) items.push(new N.Polygon({ map: map, paths: [path], fillOpacity: 0, strokeColor: col, strokeOpacity: 0.9, strokeWeight: 2.5, strokeStyle: 'shortdash', clickable: false, zIndex: 53 }));
     items.push(pg); clickable.push(pg);
   }
   var nm = txt(f.title).trim();
@@ -849,6 +851,7 @@ function buildOverlays(id, f) {
 function removeItems(items) { items.forEach(function (o) { o.setMap(null); }); }
 function syncMap(force) {
   if (!S.mapReady) return;
+  $('#map').classList.toggle('plain', S.hiddenCats.size >= CATS.length);
   if (force) { layers.forEach(function (e) { removeItems(e.items); }); layers.clear(); }
   var seen = new Set();
   S.features.forEach(function (f, id) {
@@ -920,7 +923,8 @@ function ringPts(c, e) {
 function startDraw(kind) {
   if (!S.mapReady || !S.canEdit) return;
   endDraw(true);
-  S.circle = (kind === 'circle'); if (S.circle) kind = 'area';
+  S.circle = (kind === 'area');
+  if (S.circle) map.setOptions({ draggable: false, pinchZoom: false });
   if (S.hiddenCats.has(S.activeCat)) { S.hiddenCats.delete(S.activeCat); persist(); syncMap(); }
   S.mode = kind; S.pts = [];
   closePopup();
@@ -930,8 +934,8 @@ function startDraw(kind) {
   if (isNarrow()) $('#mapwrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 function endDraw(silent) {
-  S.mode = null; S.pts = []; S.circle = false;
-  if (map) { map.setOptions({ disableDoubleClickZoom: false, disableDoubleTapZoom: false }); if (map.setCursor) map.setCursor('auto'); }
+  S.mode = null; S.pts = []; S.circle = false; dragC = null;
+  if (map) { map.setOptions({ disableDoubleClickZoom: false, disableDoubleTapZoom: false, draggable: true, pinchZoom: true }); if (map.setCursor) map.setCursor('auto'); }
   renderDraft(); if (!silent) renderUI();
 }
 function renderDraft() {
@@ -942,14 +946,13 @@ function renderDraft() {
     draftItems.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeWeight: 4, strokeStyle: 'shortdash', clickable: false, zIndex: 300 }));
   if (pts.length >= 2 && S.mode === 'area')
     draftItems.push(new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.22, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }));
-  if (S.circle && pts.length) {
-    circlePrev = new N.Polygon({ map: map, paths: [[path[0], path[0], path[0]]], fillColor: col, fillOpacity: 0.22, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 });
-    draftItems.push(circlePrev);
+  if (S.circle) {
+    /* 원형은 드래그 중에만 미리보기 */
   } else if (S.mode !== 'point' && pts.length) {
     rubber = new N.Polyline({ map: map, path: [path[path.length - 1], path[path.length - 1]], strokeColor: col, strokeWeight: 2, strokeStyle: 'shortdot', clickable: false, zIndex: 300 });
     draftItems.push(rubber);
   }
-  pts.forEach(function (q, i) {
+  if (!S.circle) pts.forEach(function (q, i) {
     var last = i === pts.length - 1, sz = last ? 18 : 12;
     var m = new N.Marker({ position: path[i], map: map, zIndex: 400, clickable: last && S.mode !== 'point',
       icon: { content: '<div style="width:' + sz + 'px;height:' + sz + 'px;border-radius:50%;background:#fff;border:3px solid ' + col + ';box-sizing:border-box"></div>',
@@ -966,13 +969,7 @@ function handlePoint(coord) {
     openRecordForm({ mode: 'new', kind: 'point', pts: [q] });
     return;
   }
-  if (S.circle) {
-    if (!S.pts.length) { S.pts = [q]; renderDraft(); renderDrawbar(); return; }
-    var rg = ringPts(S.pts[0], q);
-    if (rg.r < 5) { toast('반지름이 너무 작아요. 중심에서 조금 더 떨어진 곳을 누르세요.', 'err'); return; }
-    openRecordForm({ mode: 'new', kind: 'area', pts: rg.pts });
-    return;
-  }
+  if (S.circle) return;
   var last = S.pts[S.pts.length - 1];
   if (last && last[0] === q[0] && last[1] === q[1]) return;
   S.pts.push(q); renderDraft(); renderDrawbar();
@@ -1241,15 +1238,9 @@ function renderTools() {
   $('#whoDot').style.setProperty('--swc', CAT[S.activeCat].color);
   document.querySelectorAll('#tools [data-kind]').forEach(function (b) {
     var k = b.dataset.kind; b.textContent = '';
-    if (k === 'circle') {
-      b.append(icon('circle'), h('span', null, '원형'));
-      b.setAttribute('aria-pressed', String(S.mode === 'area' && !!S.circle));
-      b.title = '원형 구역 그리기 (중심을 누르고, 반지름만큼 떨어진 곳을 누르세요)';
-      return;
-    }
     b.append(icon(k), h('span', null, KINDS[k].label));
-    b.setAttribute('aria-pressed', String(S.mode === k && !S.circle));
-    b.title = KINDS[k].long + ' 그리기';
+    b.setAttribute('aria-pressed', String(S.mode === k));
+    b.title = k === 'area' ? '구역 그리기 (지도 위에서 드래그해 원으로 표시)' : KINDS[k].long + ' 그리기';
   });
 }
 function renderDrawbar() {
@@ -1258,11 +1249,11 @@ function renderDrawbar() {
   var c = CAT[S.activeCat], n = S.pts.length, need = S.mode === 'area' ? 3 : 2;
   var msg = S.mode === 'point' ? '지도에서 위치를 한 번 누르세요'
     : (S.mode === 'line' ? '점 ' + n + '개 · 길을 따라 눌러 점을 추가' : '꼭짓점 ' + n + '개 · 구역 모서리를 차례로 누르세요');
-  if (S.circle) msg = n ? '반지름 위치를 누르세요 (커서를 움직이면 크기가 보여요)' : '원의 중심을 누르세요';
+  if (S.circle) msg = '지도 위에서 누른 채 드래그하면 원형 구역이 그려져요';
   bar.textContent = ''; bar.hidden = false;
   bar.append(h('span', { class: 'msg' }, h('span', { class: 'dot', style: '--swc:' + c.color }), h('span', null, c.name + ' · ' + msg)));
   if (S.circle) {
-    bar.append(h('button', { class: 'btn small', type: 'button', disabled: n === 0, onclick: undoPoint }, '중심 다시'));
+    /* 완료는 손을 떼면 자동 */
   } else if (S.mode !== 'point') {
     bar.append(h('button', { class: 'btn small', type: 'button', disabled: n === 0, onclick: undoPoint }, '되돌리기'),
       h('button', { class: 'btn small primary', type: 'button', disabled: n < need, onclick: tryFinish }, '완료'));
@@ -1349,6 +1340,40 @@ function importBackup(file) {
   };
   rd.readAsText(file);
 }
+
+
+/* 구역 = 드래그로 그리는 원 */
+function circleStart(e) {
+  if (!S.circle || !S.mapReady || (e.button != null && e.button > 0)) return;
+  if (e.target.closest && e.target.closest('.overlay, .pop, button, select, input')) return;
+  var c = map.getProjection().fromPageXYToCoord(new naver.maps.Point(e.pageX, e.pageY));
+  var ctr = [r6(c.lat()), r6(c.lng())], col = CAT[S.activeCat].color;
+  e.preventDefault(); e.stopPropagation();
+  dragC = { ctr: ctr, poly: new naver.maps.Polygon({ map: map, paths: [[LL(ctr), LL(ctr), LL(ctr)]], fillColor: col, fillOpacity: 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 300 }), r: 0, pts: null };
+  try { $('#map').setPointerCapture(e.pointerId); } catch (x) {}
+}
+function circleMove(e) {
+  if (!dragC) return;
+  var c = map.getProjection().fromPageXYToCoord(new naver.maps.Point(e.pageX, e.pageY));
+  var rg = ringPts(dragC.ctr, [c.lat(), c.lng()]);
+  dragC.r = rg.r; dragC.pts = rg.pts; dragC.poly.setPaths([rg.pts.map(LL)]);
+  e.preventDefault();
+}
+function circleEnd(e) {
+  if (!dragC) return;
+  var d = dragC; dragC = null; d.poly.setMap(null);
+  try { $('#map').releasePointerCapture(e.pointerId); } catch (x) {}
+  if (d.r < 8 || !d.pts) { toast('누른 채로 끌어서 원을 그려 보세요.', 'err'); return; }
+  openRecordForm({ mode: 'new', kind: 'area', pts: d.pts });
+}
+(function () {
+  var el = document.getElementById('map');
+  el.addEventListener('pointerdown', circleStart, true);
+  el.addEventListener('pointermove', circleMove, true);
+  el.addEventListener('pointerup', circleEnd, true);
+  el.addEventListener('pointercancel', function () { if (dragC) { dragC.poly.setMap(null); dragC = null; } }, true);
+  el.style.touchAction = 'none';
+})();
 
 /* ================= 이벤트 ================= */
 document.querySelectorAll('#kindFilter button').forEach(function (b) { b.addEventListener('click', function () { S.filter = b.dataset.k; renderSide(); }); });
