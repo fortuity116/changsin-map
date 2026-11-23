@@ -251,6 +251,8 @@ textarea.field { resize: vertical; min-height: 110px; }
 .mlabel.p { transform: translate(15px, -50%); }
 .mlabel.c { transform: translate(-50%, -50%); text-align: center; }
 #map.nolabel .mlabel { display: none; }
+/* 배경 지도 타일만 흑백 (기록 오버레이·마커는 그대로 컬러) */
+#map img[src*="pstatic.net"] { filter: grayscale(1) contrast(.95) brightness(1.03); }
 
 /* 여러 카테고리 */
 .cchips { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -265,7 +267,7 @@ textarea.field { resize: vertical; min-height: 110px; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v22-zoom)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v23-gray)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
