@@ -311,7 +311,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 재개발 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v27-line)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v28-blend)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -913,25 +913,29 @@ function lineMid(pts) {
   return pts[0];
 }
 function buildOverlays(id, f) {
-  var N = naver.maps, colors = colorsOf(f), col = colors[0], items = [], path = f.pts.map(LL), clickable = [];
-  var dash = f.kind === 'line' && visCats(f).indexOf('nickname') >= 0;
-  var bg = colors.length > 1 ? 'conic-gradient(' + colors.map(function (c, i) { return c + ' ' + (i * 100 / colors.length) + '% ' + ((i + 1) * 100 / colors.length) + '%'; }).join(',') + ')' : col;
+  var N = naver.maps, ids = visCats(f); if (!ids.length) ids = catsOf(f);
+  var items = [], path = f.pts.map(LL), clickable = [];
+  /* 여러 카테고리는 대표색 없이 반투명 색을 겹쳐 쌓아서 섞인 색으로 보인다 */
   if (f.kind === 'point') {
+    var layersHtml = ids.map(function (k) { return '<div style="position:absolute;inset:0;border-radius:50%;background:' + CAT[k].color + ';opacity:' + (ids.length > 1 ? 0.6 : 0.78) + '"></div>'; }).join('');
     var m = new N.Marker({ position: path[0], map: map, zIndex: 200, clickable: true,
-      icon: { content: '<div style="width:22px;height:22px;border-radius:50%;background:' + bg + ';opacity:.78;border:3px ' + (dash ? 'dashed' : 'solid') + ' rgba(255,255,255,.95);box-sizing:border-box;box-shadow:0 0 0 1px rgba(0,0,0,.28)"></div>',
+      icon: { content: '<div style="position:relative;width:22px;height:22px;border-radius:50%;box-sizing:border-box;border:3px solid rgba(255,255,255,.95);box-shadow:0 0 0 1px rgba(0,0,0,.28)"><div style="position:absolute;inset:0;border-radius:50%;overflow:hidden">' + layersHtml + '</div></div>',
               size: new N.Size(22, 22), anchor: new N.Point(11, 11) } });
     items.push(m); clickable.push(m);
   } else if (f.kind === 'line') {
-    if (!dash) items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
-    items.push(new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: dash ? 0.9 : 0.72, strokeWeight: 4, strokeStyle: dash ? 'shortdash' : 'solid', strokeLineCap: dash ? 'butt' : 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 }));
-    if (colors.length > 1) items.push(new N.Polyline({ map: map, path: path, strokeColor: colors[1], strokeOpacity: 0.9, strokeWeight: 4, strokeStyle: 'shortdash', strokeLineCap: 'butt', clickable: false, zIndex: 103 }));
-    var hit = new N.Polyline({ map: map, path: path, strokeColor: col, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 102 });
+    var anyDash = ids.indexOf('nickname') >= 0;
+    if (!anyDash) items.push(new N.Polyline({ map: map, path: path, strokeColor: '#FFFFFF', strokeOpacity: 0.5, strokeWeight: 7, strokeLineCap: 'round', strokeLineJoin: 'round', clickable: false, zIndex: 100 }));
+    ids.forEach(function (k, i) {
+      var d = k === 'nickname';
+      items.push(new N.Polyline({ map: map, path: path, strokeColor: CAT[k].color, strokeOpacity: ids.length > 1 ? 0.62 : (d ? 0.9 : 0.72), strokeWeight: 4, strokeStyle: d ? 'shortdash' : 'solid', strokeLineCap: d ? 'butt' : 'round', strokeLineJoin: 'round', clickable: false, zIndex: 101 + i }));
+    });
+    var hit = new N.Polyline({ map: map, path: path, strokeColor: CAT[ids[0]].color, strokeOpacity: 0.01, strokeWeight: 20, clickable: true, zIndex: 110 });
     items.push(hit); clickable.push(hit);
   } else {
-    var pg = new N.Polygon({ map: map, paths: [path], fillColor: col, fillOpacity: 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: true, zIndex: 51 });
-    if (colors.length > 1) items.push(new N.Polygon({ map: map, paths: [path], fillColor: colors[1], fillOpacity: 0.16, strokeOpacity: 0, strokeWeight: 0, clickable: false, zIndex: 52 }));
-    if (dash) items.push(new N.Polygon({ map: map, paths: [path], fillOpacity: 0, strokeColor: col, strokeOpacity: 0.9, strokeWeight: 2.5, strokeStyle: 'shortdash', clickable: false, zIndex: 53 }));
-    items.push(pg); clickable.push(pg);
+    ids.forEach(function (k, i) {
+      var pg = new N.Polygon({ map: map, paths: [path], fillColor: CAT[k].color, fillOpacity: ids.length > 1 ? 0.22 : 0.26, strokeOpacity: 0, strokeWeight: 0, clickable: i === 0, zIndex: 51 + i });
+      items.push(pg); if (i === 0) clickable.push(pg);
+    });
   }
   var nm = txt(f.title).trim();
   if (nm) {
