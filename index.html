@@ -324,7 +324,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v41-stories)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v42-storycat)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -423,7 +423,7 @@ var CATS = [
   { id: 'improve',    name: '개선필요',   color: '#F08C00' },
   { id: 'sewing',     name: '봉제산업',   color: '#1C7ED6' },
   { id: 'demo',       name: '인구지형',   color: '#2F9E44' },
-  { id: 'heritage',   name: '문화유산',   color: '#7048E8' },
+  { id: 'heritage',   name: '역사적 공간',   color: '#7048E8' },
   { id: 'nickname',   name: '비공식지명', color: '#0CA5B0' },
   { id: 'researcher', name: '연구자맵핑', color: '#8A5A2B' }
 ];
@@ -481,10 +481,18 @@ function onColor(hex) {
 }
 function catOf(f) { return CAT[f && f.cat] || CATS[0]; }
 /* 한 기록이 여러 카테고리에 속할 수 있다. cat = 대표(첫 번째), cats = 전체 */
-function catsOf(f) {
+function baseCatsOf(f) {
   var a = (f && Array.isArray(f.cats) ? f.cats : []).filter(function (c) { return CAT[c]; });
   if (f && CAT[f.cat] && a.indexOf(f.cat) < 0) a.unshift(f.cat);
   return a.filter(function (c, i) { return a.indexOf(c) === i; });
+}
+/* 지도에 쓰이는 카테고리 = 기록 자체의 카테고리 + 추가 참여자들이 고른 카테고리 */
+function catsOf(f) {
+  var a = baseCatsOf(f);
+  (f && Array.isArray(f.stories) ? f.stories : []).forEach(function (x) {
+    (Array.isArray(x.cats) ? x.cats : []).forEach(function (c) { if (CAT[c] && a.indexOf(c) < 0) a.push(c); });
+  });
+  return a;
 }
 function visCats(f) { return catsOf(f).filter(function (c) { return !S.hiddenCats.has(c); }); }
 function isVisible(f) { return visCats(f).length > 0; }
@@ -878,7 +886,9 @@ function detailFor(id) {
         head.append(h('button', { class: 'btn', type: 'button', onclick: function () { openStoryForm(id, sd.idx); } }, '수정'), del);
       }
     }
+    var sc = (Array.isArray(sd.cats) && sd.cats.length ? sd.cats : baseCatsOf(f)).filter(function (k) { return CAT[k]; });
     var el = h('section', { class: 'dslide', 'aria-label': '참여자 ' + (n + 1) }, head,
+      st.length > 1 ? h('div', { class: 'cchips' }, sc.map(function (k) { return h('span', { class: 'cchip', style: '--cc:' + CAT[k].color }, h('i'), CAT[k].name); })) : null,
       h('div', { class: 'dchips' }, chip('참여자', sd.who), chip('연령대', sd.age), chip('거주기간', sd.stay)),
       h('div', { class: 'dstory' }, h('p', { class: 'dlabel' }, '들려준 이야기'), h('p', { class: story ? '' : 'none' }, story || '내용이 기록되지 않았습니다.')));
     if (SERVER && Array.isArray(sd.photos) && sd.photos.length) {
@@ -1238,7 +1248,7 @@ function refreshWhoList() {
 function openRecordForm(o) {
   var edit = o.mode === 'edit', f = edit ? S.features.get(o.id) : null;
   if (edit && !f) return;
-  var kind = edit ? f.kind : o.kind, sel = edit ? catsOf(f) : [S.activeCat];
+  var kind = edit ? f.kind : o.kind, sel = edit ? baseCatsOf(f) : [S.activeCat];
   var pre = edit ? f : { title: '', who: S.last.who, age: S.last.age, stay: S.last.stay, content: '' };
 
   var pick = h('div', { class: 'catpick', role: 'group', 'aria-label': '카테고리' });
@@ -1356,8 +1366,8 @@ function openRecordForm(o) {
 
 /* ===== 참여자(이야기) 여러 명 ===== */
 function storiesOf(f) {
-  var a = [{ main: true, who: f.who, age: f.age, stay: f.stay, content: f.content, photos: f.photos || [] }];
-  (Array.isArray(f.stories) ? f.stories : []).forEach(function (x, i) { a.push({ main: false, idx: i, who: x.who, age: x.age, stay: x.stay, content: x.content, photos: x.photos || [] }); });
+  var a = [{ main: true, who: f.who, age: f.age, stay: f.stay, content: f.content, cats: baseCatsOf(f), photos: f.photos || [] }];
+  (Array.isArray(f.stories) ? f.stories : []).forEach(function (x, i) { a.push({ main: false, idx: i, who: x.who, age: x.age, stay: x.stay, content: x.content, cats: x.cats, photos: x.photos || [] }); });
   return a;
 }
 function persistStories(id, removed, msg, slideTo) {
@@ -1378,6 +1388,19 @@ function openStoryForm(id, si) {
   if (edit && !old) return;
   if (!edit && (f.stories || []).length >= 19) { toast('참여자는 한 기록에 최대 20명까지 추가할 수 있습니다.', 'err'); return; }
   var pre = old || { who: '', age: '', stay: '', content: '', photos: [] };
+  var sel = (old && Array.isArray(old.cats) && old.cats.length ? old.cats.filter(function (c) { return CAT[c]; }) : baseCatsOf(f)).slice();
+  if (!sel.length) sel = baseCatsOf(f).slice();
+  var pick = h('div', { class: 'catpick', role: 'group', 'aria-label': '카테고리' });
+  function drawPick() {
+    pick.textContent = '';
+    CATS.forEach(function (c) {
+      var on = sel.indexOf(c.id) >= 0;
+      pick.append(h('button', { class: 'catopt', type: 'button', style: '--swc:' + c.color, 'aria-pressed': String(on),
+        onclick: function () { var i = sel.indexOf(c.id); if (i >= 0) { if (sel.length > 1) sel.splice(i, 1); } else sel.push(c.id); drawPick(); } },
+        h('span', { class: 'lsw' }), h('span', null, c.name)));
+    });
+  }
+  drawPick();
   var who = h('input', { class: 'field', id: 'sWho', type: 'text', maxlength: '40', value: txt(pre.who), list: 'whoList', autocomplete: 'off', placeholder: '이름 또는 가명 (예: P02)' });
   var age = h('select', { class: 'field', id: 'sAge' }, h('option', { value: '' }, '미기재'), AGES.map(function (a) { return h('option', { value: a, selected: pre.age === a }, a); }));
   var stay = h('input', { class: 'field', id: 'sStay', type: 'text', maxlength: '40', value: txt(pre.stay), placeholder: '예: 12년, 평생' });
@@ -1415,10 +1438,11 @@ function openStoryForm(id, si) {
       });
     }, Promise.resolve()).then(function () {
       var cur = S.features.get(id); if (!cur) { closeModal(); return; }
-      var entry = { who: who.value.trim(), age: age.value, stay: stay.value.trim(), content: content.value.trim(), photos: SERVER ? keep : [] };
+      var entry = { who: who.value.trim(), age: age.value, stay: stay.value.trim(), content: content.value.trim(), cats: sel.slice(), photos: SERVER ? keep : [] };
       var list = (cur.stories || []).slice();
       if (edit) list[si] = Object.assign({}, list[si], entry); else list.push(entry);
       S.features.set(id, Object.assign({}, cur, { stories: list, updatedAt: Date.now() }));
+      if (!isVisible(S.features.get(id))) S.hiddenCats.delete(entry.cats[0]);
       S.last = { who: entry.who, age: entry.age, stay: entry.stay };
       closeModal();
       persistStories(id, removed, edit ? '참여자 이야기를 수정했습니다.' : '참여자 이야기를 추가했습니다.', (edit ? si : list.length - 1) + 1);
@@ -1426,6 +1450,8 @@ function openStoryForm(id, si) {
   });
   var sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheetT' },
     h('h2', { id: 'sheetT' }, (edit ? '참여자 수정 · ' : '참여자 추가 · ') + (txt(f.title).trim() || '이 맵핑')),
+    h('div', null, h('span', { class: 'lbl' }, '카테고리 (이 참여자 기준, 여러 개 선택 가능)'), pick,
+      h('p', { class: 'hint' }, '다른 카테고리를 고르면 이 맵핑이 그 카테고리 레이어에도 나타나고, 지도 색이 섞여 보입니다.')),
     h('div', { class: 'fgrid' },
       h('div', { class: 'wide' }, h('label', { class: 'lbl', for: 'sWho' }, '참여자 이름'), who, h('p', { class: 'hint' }, '실명 대신 가명이나 참여자 코드를 써도 됩니다.')),
       h('div', null, h('label', { class: 'lbl', for: 'sAge' }, '연령대'), age),
@@ -1575,11 +1601,11 @@ function importBackup(file) {
       Object.keys(d.features).forEach(function (id) {
         var f = d.features[id];
         if (!validFeature(f)) return;
-        S.features.set(id, { cat: f.cat, cats: catsOf(f), kind: f.kind, pts: f.pts.map(function (q) { return [Number(q[0]), Number(q[1])]; }),
+        S.features.set(id, { cat: f.cat, cats: baseCatsOf(f), kind: f.kind, pts: f.pts.map(function (q) { return [Number(q[0]), Number(q[1])]; }),
           title: txt(f.title).slice(0, 80), who: txt(f.who).slice(0, 40), age: txt(f.age).slice(0, 20), stay: txt(f.stay).slice(0, 40),
           content: txt(f.content).slice(0, 4000), createdAt: Number(f.createdAt) || Date.now(), updatedAt: f.updatedAt ? Number(f.updatedAt) : undefined,
           photos: Array.isArray(f.photos) ? f.photos.filter(function (x) { return typeof x === 'string'; }).slice(0, CONFIG.MAX_PHOTOS) : [],
-          stories: (Array.isArray(f.stories) ? f.stories : []).slice(0, 19).map(function (x) { return { who: txt(x.who).slice(0, 40), age: txt(x.age).slice(0, 20), stay: txt(x.stay).slice(0, 40), content: txt(x.content).slice(0, 4000), photos: Array.isArray(x.photos) ? x.photos.filter(function (p) { return typeof p === 'string'; }).slice(0, CONFIG.MAX_PHOTOS) : [] }; }) });
+          stories: (Array.isArray(f.stories) ? f.stories : []).slice(0, 19).map(function (x) { return { who: txt(x.who).slice(0, 40), age: txt(x.age).slice(0, 20), stay: txt(x.stay).slice(0, 40), content: txt(x.content).slice(0, 4000), cats: (Array.isArray(x.cats) ? x.cats : []).filter(function (c) { return CAT[c]; }), photos: Array.isArray(x.photos) ? x.photos.filter(function (p) { return typeof p === 'string'; }).slice(0, CONFIG.MAX_PHOTOS) : [] }; }) });
         if (SERVER) pending.set(id, 'put');
         nf++;
       });
