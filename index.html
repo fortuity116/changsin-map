@@ -324,7 +324,7 @@ body.has-detail .zoombox { display: flex; }
     <div class="side-in">
       <header class="head">
         <h1>창신동 커뮤니티 맵핑 지도</h1>
-        <p>연구 현장 조사 기록 <span style="opacity:.6">(v44-name)</span></p>
+        <p>연구 현장 조사 기록 <span style="opacity:.6">(v45-sharedphotos)</span></p>
       </header>
       <div class="authbox" id="authbox"></div>
       <div class="notices" id="notices"></div>
@@ -891,13 +891,6 @@ function detailFor(id) {
       st.length > 1 ? h('div', { class: 'cchips' }, sc.map(function (k) { return h('span', { class: 'cchip', style: '--cc:' + CAT[k].color }, h('i'), CAT[k].name); })) : null,
       h('div', { class: 'dchips' }, chip('참여자', sd.who), chip('연령대', sd.age), chip('거주기간', sd.stay)),
       h('div', { class: 'dstory' }, h('p', { class: 'dlabel' }, '들려준 이야기'), h('p', { class: story ? '' : 'none' }, story || '내용이 기록되지 않았습니다.')));
-    if (SERVER && Array.isArray(sd.photos) && sd.photos.length) {
-      el.append(h('div', null, h('p', { class: 'dlabel' }, '현장 사진 ' + sd.photos.length + '장'),
-        h('div', { class: 'dphotos' }, sd.photos.map(function (p, i) {
-          return h('button', { class: 'dphoto', type: 'button', 'aria-label': '사진 ' + (i + 1) + ' 크게 보기', onclick: function () { openPhoto(sd.photos, i); } },
-            h('img', { src: photoUrl(p), alt: '현장 사진 ' + (i + 1), loading: 'lazy' }));
-        }))));
-    }
     return el;
   }
   var track = h('div', { class: 'dtrack' }, st.map(slide));
@@ -915,6 +908,15 @@ function detailFor(id) {
   var want = S.slideTo || 0; S.slideTo = 0;
   if (want > 0) setTimeout(function () { track.scrollTo({ left: want * (track.clientWidth + 14) }); }, 40);
   scroll.append(slider);
+  var allPh = (Array.isArray(f.photos) ? f.photos : []).slice();
+  (Array.isArray(f.stories) ? f.stories : []).forEach(function (x) { if (Array.isArray(x.photos)) allPh = allPh.concat(x.photos); });
+  if (SERVER && allPh.length) {
+    scroll.append(h('div', null, h('p', { class: 'dlabel' }, '현장 사진 ' + allPh.length + '장 (모든 참여자 공통)'),
+      h('div', { class: 'dphotos' }, allPh.map(function (p, i) {
+        return h('button', { class: 'dphoto', type: 'button', 'aria-label': '사진 ' + (i + 1) + ' 크게 보기', onclick: function () { openPhoto(allPh, i); } },
+          h('img', { src: photoUrl(p), alt: '현장 사진 ' + (i + 1), loading: 'lazy' }));
+      }))));
+  }
   scroll.append(h('div', { class: 'dstats' }, chip('기록일', f.createdAt ? new Date(f.createdAt).toLocaleDateString('ko-KR') : ''), chip(m[0], m[1])));
   var rel = Array.from(S.features.entries()).filter(function (pair) { return pair[0] !== id && validFeature(pair[1]) && catsOf(pair[1]).indexOf(catsOf(f)[0]) >= 0; })
     .sort(function (a, b) { return (b[1].createdAt || 0) - (a[1].createdAt || 0); }).slice(0, 5);
@@ -1406,47 +1408,19 @@ function openStoryForm(id, si) {
   var stay = h('input', { class: 'field', id: 'sStay', type: 'text', maxlength: '40', value: txt(pre.stay), placeholder: '예: 12년, 평생' });
   var content = h('textarea', { class: 'field', id: 'sContent', maxlength: '4000', placeholder: '이 참여자가 들려준 이야기를 적어 주세요.' }, txt(pre.content));
   var err = h('p', { class: 'err', hidden: true });
-  var photos = (SERVER && Array.isArray(pre.photos) ? pre.photos : []).map(function (p) { return { path: p }; }), removed = [];
-  var pgrid = h('div', { class: 'pgrid' }), pcount = h('span', { class: 'hint' }), fileIn = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true });
-  var addBtn = h('button', { class: 'btn small', type: 'button', onclick: function () { fileIn.click(); } }, '사진 추가');
-  function drawPhotos() {
-    pgrid.textContent = '';
-    photos.forEach(function (p, i) {
-      pgrid.append(h('div', { class: 'pitem' }, h('img', { src: p.path ? photoUrl(p.path) : p.preview, alt: '사진 ' + (i + 1) }),
-        h('button', { type: 'button', 'aria-label': '사진 ' + (i + 1) + ' 삭제', onclick: function () { if (p.path) removed.push(p.path); else if (p.preview) URL.revokeObjectURL(p.preview); photos.splice(i, 1); drawPhotos(); } }, '×')));
-    });
-    pcount.textContent = photos.length + ' / ' + CONFIG.MAX_PHOTOS + '장'; addBtn.disabled = photos.length >= CONFIG.MAX_PHOTOS;
-  }
-  fileIn.addEventListener('change', function () {
-    var files = Array.from(fileIn.files || []); fileIn.value = ''; err.hidden = true;
-    var room = CONFIG.MAX_PHOTOS - photos.length;
-    if (files.length > room) { err.textContent = '사진은 최대 ' + CONFIG.MAX_PHOTOS + '장까지입니다. 앞의 ' + room + '장만 추가합니다.'; err.hidden = false; files = files.slice(0, Math.max(0, room)); }
-    files.reduce(function (pr, file) { return pr.then(function () { return compressImage(file).then(function (b) { photos.push({ blob: b, preview: URL.createObjectURL(b) }); drawPhotos(); }); }); }, Promise.resolve())
-      .catch(function (e) { err.textContent = e.message; err.hidden = false; });
-  });
-  drawPhotos();
   var save = h('button', { class: 'btn primary', type: 'button' }, '저장');
   save.addEventListener('click', function () {
     if (!who.value.trim() && !content.value.trim()) { err.textContent = '참여자 이름이나 내용 중 하나는 입력하세요.'; err.hidden = false; who.focus(); return; }
-    save.disabled = true; save.textContent = photos.some(function (p) { return p.blob; }) ? '사진 올리는 중…' : '저장 중…'; err.hidden = true;
-    var keep = [];
-    photos.reduce(function (pr, p) {
-      return pr.then(function () {
-        if (p.path) { keep.push(p.path); return; }
-        var path = id + '/' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6) + '.jpg';
-        return sbUpload(path, p.blob).then(function () { keep.push(path); });
-      });
-    }, Promise.resolve()).then(function () {
-      var cur = S.features.get(id); if (!cur) { closeModal(); return; }
-      var entry = { who: who.value.trim(), age: age.value, stay: stay.value.trim(), content: content.value.trim(), cats: sel.slice(), photos: SERVER ? keep : [] };
-      var list = (cur.stories || []).slice();
-      if (edit) list[si] = Object.assign({}, list[si], entry); else list.push(entry);
-      S.features.set(id, Object.assign({}, cur, { stories: list, updatedAt: Date.now() }));
-      if (!isVisible(S.features.get(id))) S.hiddenCats.delete(entry.cats[0]);
-      S.last = { who: entry.who, age: entry.age, stay: entry.stay };
-      closeModal();
-      persistStories(id, removed, edit ? '참여자 이야기를 수정했습니다.' : '참여자 이야기를 추가했습니다.', (edit ? si : list.length - 1) + 1);
-    }, function (e) { save.disabled = false; save.textContent = '저장'; err.textContent = '사진을 올리지 못했습니다: ' + e.message; err.hidden = false; });
+    var cur = S.features.get(id); if (!cur) { closeModal(); return; }
+    var entry = { who: who.value.trim(), age: age.value, stay: stay.value.trim(), content: content.value.trim(), cats: sel.slice() };
+    if (old && Array.isArray(old.photos) && old.photos.length) entry.photos = old.photos;   /* 예전에 올린 사진은 그대로 보존 */
+    var list = (cur.stories || []).slice();
+    if (edit) list[si] = Object.assign({}, list[si], entry); else list.push(entry);
+    S.features.set(id, Object.assign({}, cur, { stories: list, updatedAt: Date.now() }));
+    if (!isVisible(S.features.get(id))) S.hiddenCats.delete(entry.cats[0]);
+    S.last = { who: entry.who, age: entry.age, stay: entry.stay };
+    closeModal();
+    persistStories(id, [], edit ? '참여자 이야기를 수정했습니다.' : '참여자 이야기를 추가했습니다.', (edit ? si : list.length - 1) + 1);
   });
   var sheet = h('div', { class: 'sheet', role: 'dialog', 'aria-modal': 'true', 'aria-labelledby': 'sheetT' },
     h('h2', { id: 'sheetT' }, (edit ? '참여자 수정 · ' : '참여자 추가 · ') + (txt(f.title).trim() || '이 맵핑')),
@@ -1457,7 +1431,7 @@ function openStoryForm(id, si) {
       h('div', null, h('label', { class: 'lbl', for: 'sAge' }, '연령대'), age),
       h('div', null, h('label', { class: 'lbl', for: 'sStay' }, '거주기간'), stay)),
     h('div', null, h('label', { class: 'lbl', for: 'sContent' }, '내용'), content),
-    SERVER ? h('div', null, h('span', { class: 'lbl' }, '사진 (선택)'), pgrid, h('div', { class: 'btn-row', style: 'margin-top:8px;align-items:center' }, addBtn, pcount, fileIn)) : null,
+    h('p', { class: 'hint' }, '사진은 맵핑 하나에 올린 사진을 모든 참여자가 함께 봅니다. 사진을 바꾸려면 오른쪽 아래 ‘수정’에서 올려 주세요.'),
     err, h('div', { class: 'sheet-act' }, h('button', { class: 'btn', type: 'button', onclick: closeModal }, '닫기'), save));
   openModal(sheet, who);
 }
